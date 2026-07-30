@@ -1,9 +1,98 @@
 import React, { useState, useRef, useEffect } from 'react';
+import * as pdfjsLib from 'pdfjs-dist';
+import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { MOCK_LESSON, INITIAL_TICKETS } from './mock-data';
 import TutorResult from './tutor-result';
 import QuizFlow from './quiz-flow';
 import TeacherDashboard from './teacher-dashboard';
 import { askTutor, createTicket as createTicketApi, getBackendAssetUrl, getLessons } from './api-client';
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
+
+function PdfPage({ documentProxy, pageNumber, onTextMouseUp }) {
+  const canvasRef = useRef(null);
+  const textLayerRef = useRef(null);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    let renderTask;
+
+    async function renderPage() {
+      try {
+        const page = await documentProxy.getPage(pageNumber);
+        if (cancelled || !canvasRef.current || !textLayerRef.current) return;
+
+        // The page section starts at the browser's default 300px canvas width.
+        // Measure the scroll reader instead so every PDF page fills the middle pane.
+        const readerWidth = canvasRef.current.parentElement.parentElement?.clientWidth || 760;
+        const parentWidth = Math.max(readerWidth - 24, 320);
+        const unscaledViewport = page.getViewport({ scale: 1 });
+        const scale = Math.min(parentWidth / unscaledViewport.width, 2.5);
+        const viewport = page.getViewport({ scale });
+        const canvas = canvasRef.current;
+        const context = canvas.getContext('2d');
+
+        canvas.width = Math.ceil(viewport.width);
+        canvas.height = Math.ceil(viewport.height);
+        canvas.style.width = `${Math.ceil(viewport.width)}px`;
+        canvas.style.height = `${Math.ceil(viewport.height)}px`;
+
+        renderTask = page.render({ canvasContext: context, viewport });
+        await renderTask.promise;
+        if (cancelled || !textLayerRef.current) return;
+
+        const textContent = await page.getTextContent();
+        const textLayer = textLayerRef.current;
+        textLayer.replaceChildren();
+        textLayer.style.width = `${Math.ceil(viewport.width)}px`;
+        textLayer.style.height = `${Math.ceil(viewport.height)}px`;
+
+        textContent.items.forEach((item, index) => {
+          if (!item.str) return;
+          const transform = pdfjsLib.Util.transform(viewport.transform, item.transform);
+          const fontHeight = Math.hypot(transform[2], transform[3]);
+          const span = document.createElement('span');
+          span.dataset.pdfText = 'true';
+          span.dataset.pdfPage = String(pageNumber);
+          span.dataset.pdfIndex = String(index);
+          span.textContent = item.str;
+          span.style.left = `${transform[4]}px`;
+          span.style.top = `${transform[5] - fontHeight}px`;
+          span.style.width = `${Math.max(item.width * scale, 1)}px`;
+          span.style.height = `${Math.max(fontHeight, 1)}px`;
+          span.style.fontSize = `${fontHeight}px`;
+          textLayer.appendChild(span);
+        });
+      } catch (renderError) {
+        if (!cancelled) setError(`Không thể hiển thị trang ${pageNumber}: ${renderError.message}`);
+      }
+    }
+
+    renderPage();
+    return () => {
+      cancelled = true;
+      renderTask?.cancel();
+    };
+  }, [documentProxy, pageNumber]);
+
+  return (
+    <section className="position-relative mx-auto mb-3" style={{ width: 'fit-content', minHeight: '120px' }}>
+      <canvas ref={canvasRef} className="d-block shadow-sm" />
+      <div
+        ref={textLayerRef}
+        onMouseUp={(event) => {
+          event.stopPropagation();
+          onTextMouseUp();
+        }}
+        aria-label={`Lớp văn bản có thể bôi đen của PDF, trang ${pageNumber}`}
+        className="pdf-text-layer"
+        style={{ position: 'absolute', inset: 0, userSelect: 'text', cursor: 'text' }}
+      />
+      {error && <div className="alert alert-warning small mt-2">{error}</div>}
+    </section>
+  );
+}
 
 const StudentFlow = ({ onSubmitQuestion }) => {
   const [activeTab, setActiveTab] = useState('student'); // 'student' | 'teacher'
@@ -17,6 +106,10 @@ const StudentFlow = ({ onSubmitQuestion }) => {
   const [notification, setNotification] = useState(null);
   const [dataLessons, setDataLessons] = useState([]);
   const [activeLessonId, setActiveLessonId] = useState('lesson-01');
+  const [pdfDocument, setPdfDocument] = useState(null);
+  const [pdfPageCount, setPdfPageCount] = useState(0);
+  const [pdfLoading, setPdfLoading] = useState(false);
+  const [pdfError, setPdfError] = useState('');
 
   const activeDataLesson = dataLessons.find((lesson) => lesson.lessonId === activeLessonId) || dataLessons[0];
   const lessonView = activeDataLesson
@@ -56,8 +149,8 @@ const StudentFlow = ({ onSubmitQuestion }) => {
         setDataLessons(lessons);
         if (lessons[0]?.lessonId) {
           setActiveLessonId(lessons[0].lessonId);
-          setSelectedText(lessons[0].paragraphs?.[0]?.text || '');
-          setQuestionText(lessons[0].defaultQuestion || '');
+          setSelectedText('');
+          setQuestionText('');
         }
       } catch (error) {
         setNotification({
@@ -117,6 +210,9 @@ const StudentFlow = ({ onSubmitQuestion }) => {
 
   // Canvas Freehand Drawing State
   const canvasRef = useRef(null);
+  const pdfPagesContainerRef = useRef(null);
+  const penBoundsRef = useRef(null);
+  const penPointsRef = useRef([]);
   const [isDrawing, setIsDrawing] = useState(false);
   const [prevPos, setPrevPos] = useState({ x: 0, y: 0 });
   const [hasDrawings, setHasDrawings] = useState(false);
@@ -124,11 +220,50 @@ const StudentFlow = ({ onSubmitQuestion }) => {
   // Adjust canvas size to match container
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (canvas) {
-      canvas.width = canvas.parentElement.clientWidth;
-      canvas.height = canvas.parentElement.clientHeight;
-    }
+    if (!canvas?.parentElement) return undefined;
+
+    const resizeCanvas = () => {
+      const parent = canvas.parentElement;
+      canvas.width = parent.clientWidth;
+      canvas.height = parent.clientHeight;
+    };
+    const observer = new ResizeObserver(resizeCanvas);
+    observer.observe(canvas.parentElement);
+    resizeCanvas();
+
+    return () => observer.disconnect();
   }, [toolMode]);
+
+  // Load the PDF once, then render every page in a vertically scrollable reader.
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadPdf() {
+      setPdfLoading(true);
+      setPdfError('');
+      setPdfDocument(null);
+      setPdfPageCount(0);
+
+      try {
+        const documentProxy = await pdfjsLib.getDocument(lessonView.slideUrl).promise;
+        if (cancelled) return;
+        setPdfDocument(documentProxy);
+        setPdfPageCount(documentProxy.numPages);
+      } catch (error) {
+        if (!cancelled) {
+          setPdfError(`Không thể render PDF để chọn text: ${error.message}`);
+        }
+      } finally {
+        if (!cancelled) setPdfLoading(false);
+      }
+    }
+
+    if (lessonView.slideUrl) loadPdf();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [lessonView.slideUrl]);
 
   // Canvas Drawing Handlers
   const startDrawing = (e) => {
@@ -139,6 +274,8 @@ const StudentFlow = ({ onSubmitQuestion }) => {
     const y = e.clientY - rect.top;
     setIsDrawing(true);
     setPrevPos({ x, y });
+    penBoundsRef.current = { minX: x, minY: y, maxX: x, maxY: y };
+    penPointsRef.current = [{ x, y }];
   };
 
   const draw = (e) => {
@@ -160,11 +297,51 @@ const StudentFlow = ({ onSubmitQuestion }) => {
     ctx.stroke();
 
     setPrevPos({ x, y });
+    if (penBoundsRef.current) {
+      penBoundsRef.current = {
+        minX: Math.min(penBoundsRef.current.minX, x),
+        minY: Math.min(penBoundsRef.current.minY, y),
+        maxX: Math.max(penBoundsRef.current.maxX, x),
+        maxY: Math.max(penBoundsRef.current.maxY, y)
+      };
+    }
+    penPointsRef.current.push({ x, y });
     setHasDrawings(true);
   };
 
   const stopDrawing = () => {
+    if (isDrawing && toolMode === 'pen' && penBoundsRef.current && pdfPagesContainerRef.current && canvasRef.current) {
+      const bounds = penBoundsRef.current;
+      const canvasRect = canvasRef.current.getBoundingClientRect();
+      const points = penPointsRef.current;
+      const isClosed = points.length > 6 && Math.hypot(points[0].x - points.at(-1).x, points[0].y - points.at(-1).y) < 36;
+      const pointInPolygon = (point, polygon) => polygon.reduce((inside, current, index) => {
+        const previous = polygon[index === 0 ? polygon.length - 1 : index - 1];
+        const crosses = (current.y > point.y) !== (previous.y > point.y)
+          && point.x < ((previous.x - current.x) * (point.y - current.y)) / (previous.y - current.y) + current.x;
+        return crosses ? !inside : inside;
+      }, false);
+      const text = isClosed ? Array.from(pdfPagesContainerRef.current.querySelectorAll('[data-pdf-text]'))
+        .filter((node) => {
+          const rect = node.getBoundingClientRect();
+          const center = { x: rect.left + rect.width / 2 - canvasRect.left, y: rect.top + rect.height / 2 - canvasRect.top };
+          return pointInPolygon(center, points);
+        })
+        .map((node) => node.textContent.trim())
+        .filter(Boolean)
+        .join(' ') : '';
+
+      if (text.length > 2) {
+        setSelectedText(text);
+        setQuestionText(`Giải thích đoạn em vừa khoanh: "${text}"`);
+        setNotification({ type: 'info', message: 'Đã lấy text nằm trong vùng khoanh. Bạn có thể sửa câu hỏi rồi gửi AI Tutor.' });
+      } else if ((bounds.maxX - bounds.minX) > 12 && (bounds.maxY - bounds.minY) > 12) {
+        setNotification({ type: 'warning', message: isClosed ? 'Không nhận ra text trong vùng khoanh. Hãy khoanh sát chữ hơn.' : 'Hãy khoanh kín một vùng chữ; nét bút chưa tạo thành một vòng khép kín.' });
+      }
+    }
     setIsDrawing(false);
+    penBoundsRef.current = null;
+    penPointsRef.current = [];
   };
 
   // Exact Text Selection Handler for Highlight Mode & Read Mode
@@ -496,8 +673,8 @@ const StudentFlow = ({ onSubmitQuestion }) => {
                         setActiveLessonId(doc.id);
                         const nextLesson = dataLessons.find((lesson) => lesson.lessonId === doc.id);
                         if (nextLesson) {
-                          setSelectedText(nextLesson.paragraphs?.[0]?.text || '');
-                          setQuestionText(nextLesson.defaultQuestion || '');
+                          setSelectedText('');
+                          setQuestionText('');
                           setTutorResult(null);
                           setShowQuiz(false);
                         }
@@ -520,21 +697,6 @@ const StudentFlow = ({ onSubmitQuestion }) => {
           <main className="flex-grow-1 p-4 bg-light overflow-auto position-relative">
             <div className="card shadow-sm border-0 p-4 mx-auto bg-white rounded-4 position-relative" style={{ maxWidth: '850px' }}>
               
-              {/* HTML5 Canvas overlay for Freehand Pen Drawing */}
-              <canvas
-                ref={canvasRef}
-                onMouseDown={startDrawing}
-                onMouseMove={draw}
-                onMouseUp={stopDrawing}
-                onMouseLeave={stopDrawing}
-                className="position-absolute top-0 start-0 w-100 h-100"
-                style={{
-                  pointerEvents: toolMode === 'pen' ? 'auto' : 'none',
-                  zIndex: toolMode === 'pen' ? 10 : 1,
-                  cursor: toolMode === 'pen' ? 'crosshair' : 'default'
-                }}
-              />
-
               <div className="d-flex align-items-center justify-content-between pb-3 mb-3 border-bottom position-relative" style={{ zIndex: 2 }}>
                 <span className="badge bg-secondary font-weight-bold">Tài liệu thật từ data</span>
                 <span className="small text-muted font-monospace">Mã tài liệu: {lessonView.id}</span>
@@ -550,24 +712,47 @@ const StudentFlow = ({ onSubmitQuestion }) => {
 
                 {lessonView.slideUrl && (
                   <div className="border rounded-3 overflow-hidden bg-light mb-4">
-                    <iframe
-                      title={lessonView.title}
-                      src={lessonView.slideUrl}
-                      className="w-100 border-0"
-                      style={{ height: '430px', background: '#f8fafc' }}
-                    />
+                    <div className="d-flex align-items-center justify-content-between px-3 py-2 border-bottom bg-white small">
+                      <strong>PDF có thể chọn text</strong>
+                      <span>{pdfPageCount ? `${pdfPageCount} trang · cuộn để xem tất cả` : 'Đang tải PDF…'}</span>
+                    </div>
+                    <div
+                      className="p-2 overflow-auto bg-light"
+                      ref={pdfPagesContainerRef}
+                      style={{ height: '620px' }}
+                      title="Cuộn để xem tất cả trang PDF"
+                    >
+                      {pdfLoading && <div className="small text-muted p-3">Đang tải PDF và lớp text…</div>}
+                      {pdfError && <div className="alert alert-warning m-2 small">{pdfError}</div>}
+                      <div className="position-relative" style={{ minHeight: '100%' }}>
+                        {pdfDocument && Array.from({ length: pdfPageCount }, (_, index) => (
+                          <PdfPage
+                            key={`${lessonView.id}-${index + 1}`}
+                            documentProxy={pdfDocument}
+                            pageNumber={index + 1}
+                            onTextMouseUp={handleTextMouseUp}
+                          />
+                        ))}
+                        <canvas
+                          ref={canvasRef}
+                          onMouseDown={startDrawing}
+                          onMouseMove={draw}
+                          onMouseUp={stopDrawing}
+                          onMouseLeave={stopDrawing}
+                          className="position-absolute top-0 start-0 w-100 h-100"
+                          style={{
+                            pointerEvents: toolMode === 'pen' ? 'auto' : 'none',
+                            zIndex: toolMode === 'pen' ? 10 : 1,
+                            cursor: toolMode === 'pen' ? 'crosshair' : 'default'
+                          }}
+                        />
+                      </div>
+                    </div>
                     <div className="small text-muted px-3 py-2 border-top bg-white">
-                      PDF slide thật: <a href={lessonView.slideUrl} target="_blank" rel="noreferrer">{lessonView.id}</a>
+                      Cuộn để xem toàn bộ trang. Chọn <strong>Highlight</strong> rồi bôi đen chữ trong PDF, hoặc dùng <strong>Bút</strong> khoanh kín vùng chữ để đưa đúng đoạn đó vào AI Tutor. <a href={lessonView.slideUrl} target="_blank" rel="noreferrer">Mở PDF gốc</a>
                     </div>
                   </div>
                 )}
-
-                {lessonView.paragraphs.map((p) => (
-                  <p key={p.id} className="lead text-dark mb-4 p-2 rounded hover-bg-light" style={{ lineHeight: '1.8' }}>
-                    <span className="badge bg-light text-secondary border me-2 font-monospace" style={{ fontSize: '0.7rem' }}>[{p.code}]</span>
-                    {renderParagraphText(p.text)}
-                  </p>
-                ))}
               </div>
 
               {selectedText && (
