@@ -7,6 +7,13 @@
 - **Lê Công Dũng (2A202601649)**: Dựng prototype giao diện sinh viên
 - **Lê Nguyễn Minh Đức (2A202601013)**: Dựng dashboard giảng viên
 - **Nguyễn Xuân Phượng (2A202601874)**: Kiểm thử, hoàn thiện spec và kịch bản demo
+
+**SPEC → Prototype → Demo.** Đây không phải cuộc thi code — đây là cuộc thi **tư duy sản phẩm AI**.
+
+- Thời lượng: **1,5 ngày** (một ngày build + một buổi demo)
+- Nhóm: **4-5 người** · zone tối đa 5 nhóm · thi theo lớp
+
+
 **SPEC → Prototype → Demo.** Đây không phải cuộc thi code — đây là cuộc thi **tư duy sản phẩm AI**.
 
 - Thời lượng: **1,5 ngày** (một ngày build + một buổi demo)
@@ -25,7 +32,7 @@
 | `02-guide.md` | Hướng dẫn 5 giai đoạn: khám phá → spec → build → đo & validate → demo |
 | `03-template-ai-spec.md` | Template AI Spec (nộp 23:59 ngày 1) |
 | `04-rubric.md` | Rubric 100 điểm (25 nộp checkpoint + 75 chấm bài) + checklist xác minh 6 mốc |
-| `data/` | Dữ liệu thật đã ẩn danh: chatlog VLearn tutor + 6 transcript bài giảng bản sạch — dùng để tìm bằng chứng và xây golden set |
+| `data/` | Dữ liệu thật đã ẩn danh: chatlog VLearn tutor + 6 transcript bài giảng + 2 bộ slide bản hackathon — dùng để tìm bằng chứng và xây golden set |
 | `tham-khao/` | JTBD Playbook (PDF) + worksheet JTBD đầy đủ — đọc khi muốn đào sâu |
 
 ## Lịch — 6 mốc
