@@ -60,5 +60,43 @@ export const mockQuizzes = {
       correctAnswer: 'B',
       explanation: 'Lúc Train ngẫu nhiên tắt neuron để rèn luyện mạng, còn lúc Inference bật toàn bộ neuron để thu được kết quả dự đoán đầy đủ và chính xác nhất.'
     }
+  ],
+  "lesson-03": [
+    {
+      id: 31,
+      question: "Theo bài giảng, điểm khác biệt lớn nhất giữa Automation và Augmentation là gì?",
+      options: [
+        "Automation nhanh hơn Augmentation.",
+        "Automation giao toàn quyền cho máy, Augmentation giữ con người ở lại để kiểm soát.",
+        "Augmentation tốn nhiều chi phí hơn Automation.",
+        "Automation chỉ dùng cho bài toán dễ, Augmentation dùng cho bài toán khó."
+      ],
+      correctAnswer: "B",
+      explanation: "Automation là để máy tự động làm hoàn toàn, còn Augmentation là dùng AI để tăng cường năng lực cho con người, con người vẫn là người ra quyết định cuối cùng."
+    },
+    {
+      id: 32,
+      question: "Khi giải quyết một bài toán có rủi ro và hậu quả cực kỳ nghiêm trọng (như y tế, tài chính), chiến lược nào được ưu tiên?",
+      options: [
+        "Tự động hóa hoàn toàn (100% Automation) để loại bỏ sai sót của con người.",
+        "Bắt đầu với Automation, sau đó nếu lỗi thì chuyển sang Augmentation.",
+        "Luôn ưu tiên Augmentation để con người có thể kiểm soát và can thiệp khi cần thiết.",
+        "Dùng Agent để tự động phân tích rủi ro."
+      ],
+      correctAnswer: "C",
+      explanation: "Bài giảng nhấn mạnh: nếu công việc sai gây hậu quả cực kỳ nghiêm trọng, nó cần luôn nằm ở gần phía augmentation hơn là đi về automate."
+    },
+    {
+      id: 33,
+      question: "Giảng viên khuyên cách tiếp cận khi đưa AI vào một quy trình mới là gì?",
+      options: [
+        "Áp dụng 100% tự động hóa ngay từ đầu để tiết kiệm thời gian.",
+        "Bắt đầu từ Augmentation (tăng cường), sau đó mới tăng dần mức độ tự động hóa.",
+        "Chỉ dùng AI cho những việc không quan trọng.",
+        "Không nên dùng AI nếu quy trình đó đã có từ lâu."
+      ],
+      correctAnswer: "B",
+      explanation: "Nên đi từ phía augmentation lên — đừng cố gắng automate mọi thứ 100% ngay lập tức, vì cái đấy có thể có những rủi ro rất lớn."
+    }
   ]
 };
