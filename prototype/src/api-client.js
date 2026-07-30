@@ -1,17 +1,25 @@
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:3300";
+// In development, always use Vite's /api proxy. This prevents a frontend/backend
+// port mismatch; deployments may set VITE_BACKEND_URL to an absolute API origin.
+const BACKEND_URL = import.meta.env.DEV ? "" : (import.meta.env.VITE_BACKEND_URL || "").replace(/\/+$/, "");
 
 async function request(path, options = {}) {
+  const isFormData = options.body instanceof FormData;
   const response = await fetch(`${BACKEND_URL}${path}`, {
     headers: {
-      "Content-Type": "application/json",
+      ...(isFormData ? {} : { "Content-Type": "application/json" }),
       ...(options.headers || {})
     },
     ...options
   });
 
-  const json = await response.json();
+  let json;
+  try {
+    json = await response.json();
+  } catch {
+    throw new Error(`Backend trả về phản hồi không hợp lệ (HTTP ${response.status}).`);
+  }
 
-  if (!json.ok) {
+  if (!response.ok || !json.ok) {
     throw new Error(json.error?.message || "API request failed");
   }
 
@@ -27,6 +35,25 @@ export function askTutor(payload) {
 
 export function getLessons() {
   return request("/api/lessons");
+}
+
+export function uploadLessonPdf({ lessonId, title, file, uploadedBy }) {
+  const formData = new FormData();
+  formData.append('role', 'lapcoach');
+  formData.append('lessonId', lessonId);
+  formData.append('title', title);
+  formData.append('uploadedBy', uploadedBy || 'Lab Coach');
+  formData.append('file', file);
+  return request('/api/documents', { method: 'POST', headers: {}, body: formData });
+}
+
+export function getDocuments() { return request('/api/documents'); }
+
+export function deleteLessonPdf(id) {
+  return request(`/api/documents/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    body: JSON.stringify({ role: 'lapcoach' })
+  });
 }
 
 export function getBackendAssetUrl(path) {

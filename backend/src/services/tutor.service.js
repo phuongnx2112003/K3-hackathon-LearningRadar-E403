@@ -1,8 +1,8 @@
 const { askTutor } = require("./ai-client.service");
 
 function validateTutorQuestion(payload) {
-  if (!payload.selectedText || !payload.question) {
-    return "selectedText va question la bat buoc";
+  if (!payload.question) {
+    return "question la bat buoc";
   }
 
   return null;
@@ -23,10 +23,11 @@ async function ask(payload) {
     answerId: `answer-${Date.now()}`,
     lessonId: payload.lessonId || "lesson-01",
     studentId: payload.studentId || "student-demo-01",
-    selectedText: payload.selectedText,
+    selectedText: payload.selectedText || "",
     question: payload.question,
     answer: aiResult.answer,
     citation: aiResult.citation,
+    citations: aiResult.citations || (aiResult.citation ? [aiResult.citation] : []),
     conceptId: aiResult.conceptId || "concept-dropout-01",
     conceptLabel: aiResult.conceptLabel,
     confidence: aiResult.confidence,

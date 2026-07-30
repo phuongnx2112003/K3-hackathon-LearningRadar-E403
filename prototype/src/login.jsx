@@ -18,7 +18,7 @@ const Login = ({ onLogin }) => {
       username: 'giangvien',
       password: '123',
       name: 'Lab Coach',
-      role: 'teacher',
+      role: 'lapcoach',
       roleName: 'Lab Coach',
       avatar: '👨‍🏫'
     },
@@ -26,7 +26,7 @@ const Login = ({ onLogin }) => {
       username: 'labcoach',
       password: '123',
       name: 'Lab Coach',
-      role: 'teacher',
+      role: 'lapcoach',
       roleName: 'Lab Coach',
       avatar: '👨‍🏫'
     }

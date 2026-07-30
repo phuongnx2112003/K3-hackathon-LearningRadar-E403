@@ -81,6 +81,9 @@ async function askTutor(payload) {
   }
 }
 
+async function indexDocument(payload) { return postToAiService("/ai/documents/index", payload); }
+async function deleteDocumentIndex(documentId) { return postToAiService("/ai/documents/delete", { documentId }); }
+
 async function generateQuiz(payload) {
   try {
     return await postToAiService("/ai/quiz", payload);
@@ -137,6 +140,8 @@ async function labelConcept(payload) {
 module.exports = {
   askTutor,
   analyzeSlideRegion,
+  indexDocument,
+  deleteDocumentIndex,
   generateQuiz,
   generateQuizReview,
   labelConcept

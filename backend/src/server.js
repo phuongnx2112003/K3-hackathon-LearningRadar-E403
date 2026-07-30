@@ -6,6 +6,7 @@ const { handleLessonRoutes } = require("./routes/lesson.routes");
 const { handleQuizRoutes } = require("./routes/quiz.routes");
 const { handleTicketRoutes } = require("./routes/ticket.routes");
 const { handleTutorRoutes } = require("./routes/tutor.routes");
+const { handleDocumentRoutes } = require("./routes/document.routes");
 const { sendError, sendOk, sendOptions } = require("./utils/response");
 
 const PORT = Number(process.env.PORT) || 3000;
@@ -38,6 +39,10 @@ async function requestHandler(req, res) {
 
   if (url.pathname === "/api/tutor/ask") {
     await handleTutorRoutes(req, res);
+    return;
+  }
+  if (url.pathname === "/api/documents" || url.pathname.startsWith("/api/documents/")) {
+    await handleDocumentRoutes(req, res, url);
     return;
   }
 

@@ -60,7 +60,7 @@ function App({ onSubmitQuestion }) {
     );
   }
 
-  // Teacher portal
+  // Lab Coach portal
   return (
     <div className="min-vh-100 bg-light d-flex flex-column">
       {/* Teacher Top Header */}

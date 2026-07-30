@@ -15,6 +15,14 @@ import {
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
+function cleanPdfText(value) {
+  return String(value || '')
+    .replace(/[\u0000-\u001F\u007F-\u009F\u200B-\u200D\uFEFF\uE000-\uF8FF\uFFF0-\uFFFF]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/^[\s\[\]□▪•·]+/, '')
+    .trim();
+}
+
 function PdfPage({ documentProxy, pageNumber, onTextMouseUp, onRendered, toolMode }) {
   const canvasRef = useRef(null);
   const textLayerRef = useRef(null);
@@ -55,14 +63,15 @@ function PdfPage({ documentProxy, pageNumber, onTextMouseUp, onRendered, toolMod
         textLayer.style.height = `${Math.ceil(viewport.height)}px`;
 
         textContent.items.forEach((item, index) => {
-          if (!item.str) return;
+          const readableText = cleanPdfText(item.str);
+          if (!readableText) return;
           const transform = pdfjsLib.Util.transform(viewport.transform, item.transform);
           const fontHeight = Math.hypot(transform[2], transform[3]);
           const span = document.createElement('span');
           span.dataset.pdfText = 'true';
           span.dataset.pdfPage = String(pageNumber);
           span.dataset.pdfIndex = String(index);
-          span.textContent = item.str;
+          span.textContent = readableText;
           span.style.left = `${transform[4]}px`;
           span.style.top = `${transform[5] - fontHeight}px`;
           span.style.width = `${Math.max(item.width * scale, 1)}px`;
@@ -126,6 +135,10 @@ const StudentFlow = ({ user, onLogout, onSubmitQuestion, tickets: externalTicket
   const [pdfError, setPdfError] = useState('');
   const [pdfRenderTick, setPdfRenderTick] = useState(0);
   const [selectionSource, setSelectionSource] = useState('');
+  const [selectedSnippets, setSelectedSnippets] = useState([]);
+  const selectedSnippetsRef = useRef([]);
+  const [selectedPages, setSelectedPages] = useState([]);
+  const selectedPagesRef = useRef([]);
 
   const activeDataLesson = dataLessons.find((lesson) => lesson.lessonId === activeLessonId) || dataLessons[0];
   const lessonView = activeDataLesson
@@ -172,6 +185,10 @@ const StudentFlow = ({ user, onLogout, onSubmitQuestion, tickets: externalTicket
         if (lessons[0]?.lessonId) {
           setActiveLessonId(lessons[0].lessonId);
           setSelectedText('');
+          selectedSnippetsRef.current = [];
+          setSelectedSnippets([]);
+          selectedPagesRef.current = [];
+          setSelectedPages([]);
           setQuestionText('');
         }
       } catch (error) {
@@ -255,6 +272,22 @@ const StudentFlow = ({ user, onLogout, onSubmitQuestion, tickets: externalTicket
 
   // Exact Highlighted Text List
   const [highlightedSnippets, setHighlightedSnippets] = useState([]);
+
+  const addSelectedSnippet = (text, pageNumbers = []) => {
+    const cleanText = cleanPdfText(text);
+    if (cleanText.length < 2) return;
+    const next = selectedSnippetsRef.current.includes(cleanText)
+      ? selectedSnippetsRef.current
+      : [...selectedSnippetsRef.current, cleanText];
+    selectedSnippetsRef.current = next;
+    setSelectedSnippets(next);
+    const nextPages = [...new Set([...selectedPagesRef.current, ...pageNumbers.map(Number).filter(Number.isFinite)])].sort((a, b) => a - b);
+    selectedPagesRef.current = nextPages;
+    setSelectedPages(nextPages);
+    setSelectedText(next.join('\n\n'));
+    setSelectionSource(`Đã chọn ${next.length} đoạn từ PDF.`);
+    setQuestionText((current) => current.trim() || 'Giải thích các đoạn em đã chọn giúp em.');
+  };
 
   // Canvas Freehand Drawing State
   const canvasRef = useRef(null);
@@ -518,29 +551,31 @@ const StudentFlow = ({ user, onLogout, onSubmitQuestion, tickets: externalTicket
           && point.x < ((previous.x - current.x) * (point.y - current.y)) / (previous.y - current.y) + current.x;
         return crosses ? !inside : inside;
       }, false);
-      const text = isClosed ? Array.from(pdfPagesContainerRef.current.querySelectorAll('[data-pdf-text]'))
+      const selectedNodes = isClosed ? Array.from(pdfPagesContainerRef.current.querySelectorAll('[data-pdf-text]'))
         .filter((node) => {
           const rect = node.getBoundingClientRect();
           const center = { x: rect.left + rect.width / 2 - canvasRect.left, y: rect.top + rect.height / 2 - canvasRect.top };
           return pointInPolygon(center, points);
-        })
-        .map((node) => node.textContent.trim())
+        }) : [];
+      const text = selectedNodes
+        .map((node) => cleanPdfText(node.textContent))
         .filter(Boolean)
-        .join(' ') : '';
+        .join(' ');
 
       const cleanPenText = text.replace(/\s+/g, ' ').trim();
       const regionIsLargeEnough = (bounds.maxX - bounds.minX) > 12 && (bounds.maxY - bounds.minY) > 12;
       const hasReadablePdfText = cleanPenText.length >= 12;
+      const selectedPageNumbers = [...new Set(selectedNodes.map((node) => Number(node.dataset.pdfPage)).filter(Number.isFinite))];
 
       if (isClosed && regionIsLargeEnough) {
         if (hasReadablePdfText) {
           applySelectedText(cleanPenText, {
-            source: 'Đã lấy text trực tiếp từ PDF trong vùng khoanh, không gọi LLM/OCR.'
+            source: 'Đã lấy text trực tiếp từ PDF trong vùng khoanh, không gọi LLM/OCR.',
+            pages: selectedPageNumbers
           });
-          setQuestionText(`Giải thích đoạn em vừa khoanh: "${cleanPenText}"`);
           setNotification({
             type: 'success',
-            message: 'Đã lấy text trực tiếp từ PDF. Chỉ vùng không đọc được chữ mới gọi AI OCR/vision.'
+            message: 'Đã thêm text trực tiếp từ PDF vào ngữ cảnh AI Tutor.'
           });
         } else {
           await recognizeImageRegion(bounds, cleanPenText);
@@ -561,17 +596,15 @@ const StudentFlow = ({ user, onLogout, onSubmitQuestion, tickets: externalTicket
   };
 
   const applySelectedText = (text, options = {}) => {
-    const cleanText = String(text || '').trim();
+    const cleanText = cleanPdfText(text);
     if (cleanText.length < 2) return;
 
-    setSelectedText(cleanText);
-    setSelectionSource(options.source || 'Đã lấy đoạn text từ slide.');
+    addSelectedSnippet(cleanText, options.pages || []);
 
     if (options.highlight) {
       setHighlightedSnippets((current) => (
         current.includes(cleanText) ? current : [...current, cleanText]
       ));
-      setQuestionText(`Giải thích đoạn trích highlight: "${cleanText}"`);
       return;
     }
 
@@ -586,8 +619,13 @@ const StudentFlow = ({ user, onLogout, onSubmitQuestion, tickets: externalTicket
     const text = selection.toString().trim();
 
     if (text && text.length > 2) {
+      const selectedPages = [...new Set(Array.from(document.querySelectorAll('[data-pdf-text]'))
+        .filter((node) => selection.containsNode(node, true))
+        .map((node) => Number(node.dataset.pdfPage))
+        .filter(Number.isFinite))];
       applySelectedText(text, {
         highlight: toolMode === 'highlight',
+        pages: selectedPages,
         source: toolMode === 'highlight'
           ? 'Đã highlight đoạn text trong transcript.'
           : 'Đã bôi đen đoạn text trong transcript.'
@@ -599,6 +637,10 @@ const StudentFlow = ({ user, onLogout, onSubmitQuestion, tickets: externalTicket
   // Clear drawings and highlights
   const handleClearAnnotations = () => {
     setHighlightedSnippets([]);
+    selectedSnippetsRef.current = [];
+    setSelectedSnippets([]);
+    selectedPagesRef.current = [];
+    setSelectedPages([]);
     drawingStartRef.current = null;
     setSelectedText('');
     setSelectionSource('');
@@ -613,10 +655,10 @@ const StudentFlow = ({ user, onLogout, onSubmitQuestion, tickets: externalTicket
 
   // Step 4: Click Gửi (Send)
   const handleSend = async () => {
-    if (!questionText.trim() || !selectedText.trim()) {
+    if (!questionText.trim()) {
       setNotification({
         type: 'warning',
-        message: 'Hãy chọn/dán đoạn tài liệu và nhập câu hỏi trước khi gửi AI Tutor.'
+        message: 'Hãy nhập câu hỏi trước khi gửi AI Tutor.'
       });
       return;
     }
@@ -628,6 +670,7 @@ const StudentFlow = ({ user, onLogout, onSubmitQuestion, tickets: externalTicket
         lessonId: activeDataLesson?.lessonId || 'lesson-01',
         studentId: 'student-demo-01',
         selectedText,
+        selectedPages,
         question: questionText
       });
       setTutorResult({
@@ -650,17 +693,10 @@ const StudentFlow = ({ user, onLogout, onSubmitQuestion, tickets: externalTicket
   const handleSubmitQuestion = () => {
     const payload = {
       selectedText: selectedText.trim(),
+      selectedPages,
       question: questionText.trim(),
       lessonId: activeDataLesson?.lessonId || 'lesson-01'
     };
-
-    if (!payload.selectedText) {
-      setNotification({
-        type: 'warning',
-        message: 'Hãy chọn hoặc dán đoạn tài liệu cần hỏi trước khi gửi AI Tutor.'
-      });
-      return;
-    }
 
     if (!payload.question) {
       setNotification({
@@ -932,6 +968,10 @@ const StudentFlow = ({ user, onLogout, onSubmitQuestion, tickets: externalTicket
                         const nextLesson = dataLessons.find((lesson) => lesson.lessonId === doc.id);
                         if (nextLesson) {
                           setSelectedText('');
+                          selectedSnippetsRef.current = [];
+                          setSelectedSnippets([]);
+                          selectedPagesRef.current = [];
+                          setSelectedPages([]);
                           setQuestionText('');
                           setTutorResult(null);
                           setShowQuiz(false);
@@ -1017,16 +1057,21 @@ const StudentFlow = ({ user, onLogout, onSubmitQuestion, tickets: externalTicket
                 )}
               </div>
 
-              {selectedText && (
+              {selectedSnippets.length > 0 && (
                 <div className="alert alert-indigo mt-3 d-flex align-items-center justify-content-between gap-2 p-2 position-relative" style={{ background: '#e0e7ff', color: '#3730a3', zIndex: 2 }}>
-                  <small className="text-truncate" style={{ maxWidth: '76%' }}>
-                    <strong>Đoạn trích chọn:</strong> "{selectedText}"
+                  <small style={{ maxWidth: '76%' }}>
+                    <strong>Đã chọn {selectedSnippets.length} đoạn{selectedPages.length ? ` · Trang ${selectedPages.join(', ')}` : ''}:</strong>
+                    {selectedSnippets.map((snippet, index) => <span className="d-block text-truncate" key={`${snippet}-${index}`}>[{index + 1}] {snippet}</span>)}
                     {selectionSource && <span className="d-block text-muted">{selectionSource}</span>}
                   </small>
                   <button
                     className="btn btn-sm btn-primary font-weight-bold"
                     onClick={() => {
                       setSelectedText('');
+                      selectedSnippetsRef.current = [];
+                      setSelectedSnippets([]);
+                      selectedPagesRef.current = [];
+                      setSelectedPages([]);
                       setSelectionSource('');
                     }}
                   >
@@ -1057,6 +1102,10 @@ const StudentFlow = ({ user, onLogout, onSubmitQuestion, tickets: externalTicket
                 value={selectedText}
                 onChange={(e) => {
                   setSelectedText(e.target.value);
+                  selectedSnippetsRef.current = [];
+                  setSelectedSnippets([]);
+                  selectedPagesRef.current = [];
+                  setSelectedPages([]);
                   setSelectionSource(e.target.value.trim() ? 'Đã nhập/dán thủ công.' : '');
                 }}
               />

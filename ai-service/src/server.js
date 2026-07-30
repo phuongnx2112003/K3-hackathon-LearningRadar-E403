@@ -6,6 +6,8 @@ const { handleLabelRoute } = require("./routes/label.routes");
 const { handleQuizReviewRoute } = require("./routes/quiz-review.routes");
 const { handleQuizRoute } = require("./routes/quiz.routes");
 const { handleSlideRegionRoute } = require("./routes/slide-region.routes");
+const { handleDocumentIndexRoute, handleDocumentDeleteRoute } = require("./routes/document.routes");
+const { bootstrapDefaultMaterials } = require("./services/default-materials.service");
 const { sendError, sendOk, sendOptions } = require("./utils/response");
 
 const PORT = Number(process.env.PORT) || 4000;
@@ -15,7 +17,9 @@ const routes = {
   "/ai/quiz": handleQuizRoute,
   "/ai/quiz-review": handleQuizReviewRoute,
   "/ai/slide-region": handleSlideRegionRoute,
-  "/ai/label": handleLabelRoute
+  "/ai/label": handleLabelRoute,
+  "/ai/documents/index": handleDocumentIndexRoute,
+  "/ai/documents/delete": handleDocumentDeleteRoute
 };
 
 async function requestHandler(req, res) {
@@ -53,6 +57,9 @@ const server = http.createServer((req, res) => {
 if (require.main === module) {
   server.listen(PORT, () => {
     console.log(`LearningRadar AI service running at http://localhost:${PORT}`);
+    bootstrapDefaultMaterials()
+      .then((results) => console.log("Default material indexing:", results))
+      .catch((error) => console.error("Default material indexing failed:", error.message));
   });
 }
 

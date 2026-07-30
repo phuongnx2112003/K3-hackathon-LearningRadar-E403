@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { getDashboardTickets, sendTicketFeedback, updateTicketStatus } from './api-client';
+import { deleteLessonPdf, getBackendAssetUrl, getDashboardTickets, getDocuments, sendTicketFeedback, updateTicketStatus, uploadLessonPdf } from './api-client';
 
 const TeacherDashboard = ({ tickets: initialTickets = [], onUpdateTicketStatus }) => {
   const [filterStatus, setFilterStatus] = useState('All');
@@ -10,6 +10,48 @@ const TeacherDashboard = ({ tickets: initialTickets = [], onUpdateTicketStatus }
   const [selectedTicketId, setSelectedTicketId] = useState(null);
   const [feedbackDrafts, setFeedbackDrafts] = useState({});
   const [actionMessage, setActionMessage] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const [uploadForm, setUploadForm] = useState({ lessonId: `lesson-${new Date().toISOString().slice(0, 10)}`, title: '', file: null });
+  const [documents, setDocuments] = useState([]);
+
+  const handleUpload = async (event) => {
+    event.preventDefault();
+    if (!uploadForm.lessonId.trim() || !uploadForm.title.trim() || !uploadForm.file) {
+      setActionMessage('Nhập mã bài học, tiêu đề và chọn file PDF trước khi upload.');
+      return;
+    }
+    if (!/\.pdf$/i.test(uploadForm.file.name)) {
+      setActionMessage('Chỉ hỗ trợ file PDF.');
+      return;
+    }
+    setUploading(true);
+    setActionMessage('Đang upload, trích xuất nội dung và tạo embedding vào SQLite…');
+    try {
+      const data = await uploadLessonPdf({ ...uploadForm, uploadedBy: 'Lab Coach' });
+      setActionMessage(`Đã sẵn sàng cho học viên: ${data.document.title} (${data.document.chunkCount} đoạn đã embedding).`);
+      await loadDocuments();
+      setUploadForm({ lessonId: `lesson-${new Date().toISOString().slice(0, 10)}`, title: '', file: null });
+      event.target.reset();
+    } catch (error) {
+      setActionMessage(`Upload chưa hoàn tất: ${error.message}`);
+    } finally { setUploading(false); }
+  };
+
+  const loadDocuments = async () => {
+    try {
+      const data = await getDocuments();
+      setDocuments(Array.isArray(data.documents) ? data.documents : []);
+    } catch (error) { setActionMessage(`Không tải được danh sách học liệu: ${error.message}`); }
+  };
+
+  const handleDeleteDocument = async (document) => {
+    if (!window.confirm(`Xóa “${document.title}”? PDF và ${document.chunkCount} embedding sẽ bị xóa vĩnh viễn.`)) return;
+    try {
+      const result = await deleteLessonPdf(document.id);
+      setDocuments((items) => items.filter((item) => item.id !== document.id));
+      setActionMessage(`Đã xóa ${document.title} và ${result.deletedChunks} embedding.`);
+    } catch (error) { setActionMessage(`Không thể xóa tài liệu: ${error.message}`); }
+  };
 
   // Load tickets from Backend API
   const loadDashboardData = async () => {
@@ -33,6 +75,8 @@ const TeacherDashboard = ({ tickets: initialTickets = [], onUpdateTicketStatus }
   useEffect(() => {
     loadDashboardData();
   }, [filterStatus, initialTickets]);
+
+  useEffect(() => { loadDocuments(); }, []);
 
   // Handle status update
   const handleStatusChange = async (ticketId, newStatus) => {
@@ -189,6 +233,52 @@ const TeacherDashboard = ({ tickets: initialTickets = [], onUpdateTicketStatus }
           {actionMessage}
         </div>
       )}
+
+      <section className="border rounded-3 p-3 mb-4" style={{ background: '#f8faff' }}>
+        <div className="d-flex align-items-start justify-content-between gap-3 mb-3">
+          <div>
+            <h5 className="mb-1">📤 Học liệu PDF cho bài học</h5>
+            <p className="small text-muted mb-0">PDF sẽ được trích xuất, chia đoạn và embedding vào SQLite local trong project. Học viên sẽ thấy tài liệu mới trong danh sách bài học.</p>
+          </div>
+          <span className="badge bg-primary">Role: lapcoach</span>
+        </div>
+        <form className="row g-2 align-items-end" onSubmit={handleUpload}>
+          <div className="col-md-3">
+            <label className="form-label small fw-bold">Mã bài học</label>
+            <input className="form-control" value={uploadForm.lessonId} onChange={(e) => setUploadForm((form) => ({ ...form, lessonId: e.target.value }))} placeholder="lesson-day-03" />
+          </div>
+          <div className="col-md-4">
+            <label className="form-label small fw-bold">Tiêu đề hiển thị</label>
+            <input className="form-control" value={uploadForm.title} onChange={(e) => setUploadForm((form) => ({ ...form, title: e.target.value }))} placeholder="Bài học hôm nay — RAG" />
+          </div>
+          <div className="col-md-3">
+            <label className="form-label small fw-bold">File PDF (tối đa 25 MB)</label>
+            <input className="form-control" type="file" accept="application/pdf,.pdf" onChange={(e) => setUploadForm((form) => ({ ...form, file: e.target.files?.[0] || null }))} />
+          </div>
+          <div className="col-md-2 d-grid">
+            <button className="btn btn-primary fw-bold" disabled={uploading} type="submit">{uploading ? 'Đang embedding…' : 'Upload PDF'}</button>
+          </div>
+        </form>
+        <div className="mt-3 pt-3 border-top">
+          <div className="d-flex justify-content-between align-items-center mb-2">
+            <div className="small fw-bold text-dark">📚 Tài liệu đã upload ({documents.length})</div>
+            <button type="button" className="btn btn-sm btn-outline-secondary" onClick={loadDocuments}>↻ Tải lại danh sách</button>
+          </div>
+          {documents.length === 0 ? <div className="alert alert-light border small mb-0">Chưa có tài liệu nào. Sau khi upload thành công, PDF sẽ xuất hiện ở đây để bạn xem hoặc xóa.</div> : (
+            <div className="list-group">
+              {documents.map((document) => (
+                <div className="list-group-item d-flex align-items-center justify-content-between gap-3" key={document.id}>
+                  <div className="small"><strong>📄 {document.title}</strong><div className="text-muted">{document.originalFilename} · {document.lessonId} · {document.chunkCount} embeddings · {new Date(document.createdAt).toLocaleString('vi-VN')}</div></div>
+                  <div className="d-flex gap-2 flex-shrink-0">
+                    <a className="btn btn-sm btn-outline-primary" href={getBackendAssetUrl(`/api/documents/${document.id}/file`)} target="_blank" rel="noreferrer">👁️ Xem PDF</a>
+                    <button type="button" className="btn btn-sm btn-outline-danger" onClick={() => handleDeleteDocument(document)}>🗑️ Xóa</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </section>
 
       {/* Summary Cards */}
       <div className="row g-3 mb-4">
