@@ -169,6 +169,8 @@ export const INITIAL_TICKETS = [
     selectedText: 'Kỹ thuật Dropout hoạt động bằng cách ngẫu nhiên tắt một tỷ lệ neuron...',
     question: 'Nếu tắt neuron thì lúc nộp bài làm sao dự đoán đúng được ạ?',
     conceptLabel: 'Phân biệt Dropout lúc Train vs Inference',
+    reason: 'not_understood',
+    quizScore: null,
     source: 'Bấm "Chưa hiểu"',
     status: 'Mới',
     createdAt: '10:14 AM'

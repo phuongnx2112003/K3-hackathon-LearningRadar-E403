@@ -15,6 +15,24 @@ const StudentFlow = () => {
   const [tickets, setTickets] = useState(INITIAL_TICKETS);
   const [notification, setNotification] = useState(null);
 
+  const createTicket = ({ reason, quizScore = null }) => {
+    const newTicket = {
+      id: `TICKET-${103 + tickets.length}`,
+      studentName: 'Sinh viên ẩn danh (U102)',
+      selectedText: selectedText || MOCK_LESSON.paragraphs[1].text,
+      question: questionText || 'Chưa hiểu rõ về Dropout lúc Train vs Predict',
+      conceptLabel: tutorResult?.conceptLabel || 'Phân biệt Dropout lúc Train vs Inference',
+      reason,
+      quizScore,
+      source: reason === 'not_understood' ? 'Bấm "Chưa hiểu"' : `Fail Quiz (${quizScore}/5 câu)`,
+      status: 'Mới',
+      createdAt: 'Bây giờ'
+    };
+
+    setTickets((currentTickets) => [newTicket, ...currentTickets]);
+    return newTicket;
+  };
+
   // Exact Highlighted Text List
   const [highlightedSnippets, setHighlightedSnippets] = useState([]);
 
@@ -102,7 +120,13 @@ const StudentFlow = () => {
 
   // Step 4: Click Gửi (Send)
   const handleSend = () => {
-    if (!questionText.trim() && !selectedText) return;
+    if (!questionText.trim() || !selectedText.trim()) {
+      setNotification({
+        type: 'warning',
+        message: 'Hãy chọn/dán đoạn tài liệu và nhập câu hỏi trước khi gửi AI Tutor.'
+      });
+      return;
+    }
     setLoading(true);
     setTutorResult(null);
 
@@ -123,17 +147,7 @@ const StudentFlow = () => {
 
   // Step 6 & 8: User clicks "Chưa hiểu" -> Create Ticket
   const handleNotUnderstand = () => {
-    const newTicket = {
-      id: `TICKET-${Math.floor(100 + Math.random() * 900)}`,
-      studentName: 'Sinh viên ẩn danh (U102)',
-      selectedText: selectedText || MOCK_LESSON.paragraphs[1].text,
-      question: questionText || 'Chưa hiểu rõ về Dropout lúc Train vs Predict',
-      conceptLabel: tutorResult?.conceptLabel || 'Phân biệt Dropout',
-      source: 'Bấm "Chưa hiểu"',
-      status: 'Mới',
-      createdAt: 'Bây giờ'
-    };
-    setTickets([newTicket, ...tickets]);
+    const newTicket = createTicket({ reason: 'not_understood' });
     setNotification({
       type: 'warning',
       message: `🔴 Đã tự động tạo Ticket #${newTicket.id} gửi sang Dashboard Giảng viên!`
@@ -149,9 +163,10 @@ const StudentFlow = () => {
         message: `🎉 Chúc mừng bạn đã đạt ${score}/5 câu Quiz! Tín hiệu hiểu bài đã được lưu vào hệ thống VLearn.`
       });
     } else {
+      const newTicket = createTicket({ reason: 'quiz_failed', quizScore: score });
       setNotification({
-        type: 'warning',
-        message: `💡 Bạn trả lời đúng ${score}/5 câu. AI Tutor đã phân tích & giải thích chi tiết lý do làm sai cho từng câu để bạn ôn tập lại!`
+        type: 'danger',
+        message: `⚠️ Bạn đạt ${score}/5 câu. Đã tạo Ticket #${newTicket.id} để TA hỗ trợ; bạn vẫn có thể xem giải thích và làm lại quiz.`
       });
     }
   };
@@ -408,6 +423,14 @@ const StudentFlow = () => {
 
             {/* Input Form */}
             <div className="mb-3">
+              <label className="form-label small text-muted font-weight-bold">Đoạn tài liệu cần hỏi:</label>
+              <textarea
+                className="form-control mb-3"
+                rows="3"
+                placeholder="Bôi đen đoạn slide bên trái hoặc dán đoạn kiến thức vào đây."
+                value={selectedText}
+                onChange={(e) => setSelectedText(e.target.value)}
+              />
               <label className="form-label small text-muted font-weight-bold">Nhập câu hỏi của bạn:</label>
               <textarea
                 className="form-control"
