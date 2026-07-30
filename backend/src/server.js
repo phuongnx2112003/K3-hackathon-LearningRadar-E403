@@ -39,7 +39,7 @@ async function requestHandler(req, res) {
   }
 
   if (url.pathname === "/api/dashboard/tickets") {
-    handleDashboardRoutes(req, res);
+    handleDashboardRoutes(req, res, url);
     return;
   }
 

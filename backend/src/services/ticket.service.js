@@ -1,8 +1,18 @@
+// Ticket Service - Quản lý tạo / đọc / cập nhật Ticket
+// Tuân thủ Contract trong policy.md (Section 7.7 & 10)
+
 const { mockTickets } = require("../data/mock-tickets");
 
 const allowedReasons = new Set(["not_understood", "quiz_failed"]);
+const allowedStatuses = new Set(["open", "reviewed", "closed"]);
 
+/**
+ * POST /api/tickets - Tạo ticket mới
+ * Ticket được tạo khi: sinh viên bấm "Chưa hiểu" (reason: not_understood)
+ * hoặc fail quiz dưới 3/5 (reason: quiz_failed)
+ */
 function createTicket(payload) {
+  // Validate bắt buộc theo policy.md Section 7.7
   if (!payload.selectedText || !payload.question || !payload.conceptLabel || !payload.reason) {
     const error = new Error("selectedText, question, conceptLabel va reason la bat buoc");
     error.code = "VALIDATION_ERROR";
@@ -10,9 +20,18 @@ function createTicket(payload) {
   }
 
   if (!allowedReasons.has(payload.reason)) {
-    const error = new Error("reason phai la not_understood hoac quiz_failed");
+    const error = new Error("reason phai la 'not_understood' hoac 'quiz_failed'");
     error.code = "VALIDATION_ERROR";
     throw error;
+  }
+
+  // Nếu reason là quiz_failed thì quizScore phải có và < 3
+  if (payload.reason === "quiz_failed") {
+    if (payload.quizScore === undefined || payload.quizScore === null) {
+      const error = new Error("quizScore la bat buoc khi reason = quiz_failed");
+      error.code = "VALIDATION_ERROR";
+      throw error;
+    }
   }
 
   const ticket = {
@@ -33,24 +52,63 @@ function createTicket(payload) {
   return ticket;
 }
 
-function listTickets() {
+/**
+ * Lấy danh sách tickets, có thể filter theo status
+ */
+function listTickets(filterStatus) {
+  if (filterStatus && allowedStatuses.has(filterStatus)) {
+    return mockTickets.filter((t) => t.status === filterStatus);
+  }
   return mockTickets;
 }
 
-function getDashboardSummary() {
-  const counts = new Map();
-
-  for (const ticket of mockTickets) {
-    counts.set(ticket.conceptLabel, (counts.get(ticket.conceptLabel) || 0) + 1);
+/**
+ * Cập nhật trạng thái ticket (Giảng viên dùng)
+ * status: "open" | "reviewed" | "closed"
+ */
+function updateTicketStatus(ticketId, newStatus) {
+  if (!allowedStatuses.has(newStatus)) {
+    const error = new Error("status phai la 'open', 'reviewed' hoac 'closed'");
+    error.code = "VALIDATION_ERROR";
+    throw error;
   }
 
-  const topConcepts = Array.from(counts.entries())
+  const ticket = mockTickets.find((t) => t.id === ticketId);
+  if (!ticket) {
+    const error = new Error(`Khong tim thay ticket ${ticketId}`);
+    error.code = "NOT_FOUND";
+    throw error;
+  }
+
+  ticket.status = newStatus;
+  return ticket;
+}
+
+/**
+ * Thống kê tổng hợp cho Dashboard Giảng viên
+ * policy.md Section 7.8: tổng ticket, ticket open, nhãn kiến thức yếu
+ */
+function getDashboardSummary() {
+  const conceptCounts = new Map();
+  const reasonCounts = { not_understood: 0, quiz_failed: 0 };
+
+  for (const ticket of mockTickets) {
+    conceptCounts.set(ticket.conceptLabel, (conceptCounts.get(ticket.conceptLabel) || 0) + 1);
+    if (reasonCounts[ticket.reason] !== undefined) {
+      reasonCounts[ticket.reason]++;
+    }
+  }
+
+  const topConcepts = Array.from(conceptCounts.entries())
     .map(([conceptLabel, count]) => ({ conceptLabel, count }))
     .sort((a, b) => b.count - a.count);
 
   return {
     totalTickets: mockTickets.length,
-    openTickets: mockTickets.filter((ticket) => ticket.status === "open").length,
+    openTickets: mockTickets.filter((t) => t.status === "open").length,
+    reviewedTickets: mockTickets.filter((t) => t.status === "reviewed").length,
+    closedTickets: mockTickets.filter((t) => t.status === "closed").length,
+    reasonBreakdown: reasonCounts,
     topConcepts
   };
 }
@@ -58,5 +116,6 @@ function getDashboardSummary() {
 module.exports = {
   createTicket,
   getDashboardSummary,
-  listTickets
+  listTickets,
+  updateTicketStatus
 };
