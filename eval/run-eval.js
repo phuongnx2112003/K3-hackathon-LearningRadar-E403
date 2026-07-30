@@ -33,12 +33,18 @@ function containsAny(answer, phrases) {
   return phrases.some((phrase) => normalizedAnswer.includes(normalize(phrase)));
 }
 
-async function postJson(url, payload) {
+async function postJson(url, payload, timeoutMs = 45000) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
   const response = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload)
+    body: JSON.stringify(payload),
+    signal: controller.signal
   });
+
+  clearTimeout(timeout);
 
   const json = await response.json();
 
@@ -153,27 +159,50 @@ async function main() {
     const results = [];
 
     for (const testCase of testCases) {
-      const data = await postJson(`${BACKEND_URL}/api/tutor/ask`, {
-        lessonId: "lesson-01",
-        studentId: "eval-runner",
-        selectedText: testCase.selectedText,
-        question: testCase.question
-      });
+      try {
+        const data = await postJson(`${BACKEND_URL}/api/tutor/ask`, {
+          lessonId: "lesson-01",
+          studentId: "eval-runner",
+          selectedText: testCase.selectedText,
+          question: testCase.question
+        });
 
-      const grade = gradeCase(testCase, data);
-      results.push({
-        id: testCase.id,
-        type: testCase.type,
-        source: testCase.source,
-        question: testCase.question,
-        selectedText: testCase.selectedText,
-        answer: data.answer,
-        conceptLabel: data.conceptLabel,
-        fallback: data.fallback === true,
-        ...grade
-      });
+        const grade = gradeCase(testCase, data);
+        results.push({
+          id: testCase.id,
+          type: testCase.type,
+          source: testCase.source,
+          question: testCase.question,
+          selectedText: testCase.selectedText,
+          answer: data.answer,
+          conceptLabel: data.conceptLabel,
+          fallback: data.fallback === true,
+          error: "",
+          ...grade
+        });
 
-      console.log(`${testCase.id}: ${grade.passed ? "PASS" : "FAIL"}`);
+        console.log(`${testCase.id}: ${grade.passed ? "PASS" : "FAIL"}`);
+      } catch (error) {
+        results.push({
+          id: testCase.id,
+          type: testCase.type,
+          source: testCase.source,
+          question: testCase.question,
+          selectedText: testCase.selectedText,
+          answer: "",
+          conceptLabel: "",
+          fallback: false,
+          error: error.name === "AbortError" ? "timeout" : error.message,
+          passed: false,
+          hasRequired: false,
+          hasForbidden: false,
+          noFallback: true
+        });
+        console.log(`${testCase.id}: FAIL (${error.name === "AbortError" ? "timeout" : error.message})`);
+      }
+
+      fs.writeFileSync(resultsJsonPath, JSON.stringify(results, null, 2), "utf8");
+      fs.writeFileSync(resultsMdPath, toMarkdown(results), "utf8");
     }
 
     fs.writeFileSync(resultsJsonPath, JSON.stringify(results, null, 2), "utf8");

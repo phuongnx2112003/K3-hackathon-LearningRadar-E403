@@ -2,6 +2,7 @@ const { findCitation } = require("../services/citation.service");
 const { labelConcept } = require("../services/concept-label.service");
 const { generateTutorAnswer } = require("../services/llm.service");
 const { buildTutorPrompt } = require("../services/prompt.service");
+const { decideGuardrail } = require("../services/guardrail.service");
 const { readJson, sendError, sendOk } = require("../utils/response");
 
 function isNonEmptyString(value) {
@@ -19,6 +20,19 @@ async function handleAskRoute(req, res) {
 
     if (!isNonEmptyString(payload.selectedText) || !isNonEmptyString(payload.question)) {
       sendError(res, 400, "VALIDATION_ERROR", "selectedText va question la bat buoc");
+      return;
+    }
+
+    const guardrail = decideGuardrail(payload);
+    if (guardrail.handled) {
+      sendOk(res, {
+        answer: guardrail.answer,
+        citation: findCitation(payload),
+        conceptId: guardrail.conceptId,
+        conceptLabel: guardrail.conceptLabel,
+        confidence: guardrail.confidence,
+        decision: "guardrail"
+      });
       return;
     }
 
