@@ -1,5 +1,12 @@
 # Mini Hackathon AI — Batch 03
 
+## Đội ngũ thực hiện - LearningRadar cho AI Tutor
+- **Trần Đức Mạnh (2A202601567)**: Xử lý dữ liệu, thống kê bằng chứng
+- **Phùng Hồng Phước (2A202601215)**: Thiết kế luồng hỏi đáp, UX/UI màn hình
+- **Nguyễn Đào Nam Hải (2A202601037)**: Xây prompt AI tutor, tạo bộ quiz
+- **Lê Công Dũng (2A202601649)**: Dựng prototype giao diện sinh viên
+- **Lê Nguyễn Minh Đức (2A202601013)**: Dựng dashboard giảng viên
+- **Nguyễn Xuân Phượng (2A202601874)**: Kiểm thử, hoàn thiện spec và kịch bản demo
 **SPEC → Prototype → Demo.** Đây không phải cuộc thi code — đây là cuộc thi **tư duy sản phẩm AI**.
 
 - Thời lượng: **1,5 ngày** (một ngày build + một buổi demo)
