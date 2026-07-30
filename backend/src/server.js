@@ -1,5 +1,8 @@
+require("./utils/env").loadEnv();
+
 const http = require("http");
 const { handleDashboardRoutes } = require("./routes/dashboard.routes");
+const { handleLessonRoutes } = require("./routes/lesson.routes");
 const { handleQuizRoutes } = require("./routes/quiz.routes");
 const { handleTicketRoutes } = require("./routes/ticket.routes");
 const { handleTutorRoutes } = require("./routes/tutor.routes");
@@ -20,6 +23,11 @@ async function requestHandler(req, res) {
       service: "backend",
       message: "LearningRadar backend is running"
     });
+    return;
+  }
+
+  if (url.pathname === "/api/lessons" || url.pathname.startsWith("/api/slides/")) {
+    handleLessonRoutes(req, res, url);
     return;
   }
 

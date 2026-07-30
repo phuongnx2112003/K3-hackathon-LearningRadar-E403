@@ -25,6 +25,16 @@ export function askTutor(payload) {
   });
 }
 
+export function getLessons() {
+  return request("/api/lessons");
+}
+
+export function getBackendAssetUrl(path) {
+  if (!path) return "";
+  if (/^https?:\/\//i.test(path)) return path;
+  return `${BACKEND_URL}${path.startsWith("/") ? path : `/${path}`}`;
+}
+
 export function getQuiz(conceptId) {
   const params = new URLSearchParams({ conceptId });
   return request(`/api/quiz?${params.toString()}`);

@@ -1,0 +1,31 @@
+.cursor-pointer {
+  cursor: pointer;
+}
+
+.transition-all {
+  transition: all 0.18s ease;
+}
+
+.animate-fade-in {
+  animation: fade-in 0.18s ease-out;
+}
+
+.hover-bg-light:hover {
+  background: #f8fafc;
+}
+
+.hover-bg-gray:hover {
+  background: #eef2f7 !important;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

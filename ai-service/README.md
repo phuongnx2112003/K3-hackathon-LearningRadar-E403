@@ -9,14 +9,30 @@ AI service phu trach:
 - Gan concept label.
 - Sinh quiz 5 cau.
 
-Service luôn gọi OpenAI Responses API; không có mock fallback.
+## Cau Hinh OpenAI That
 
-## Chay local
+Tao file `ai-service/.env`:
+
+```text
+PORT=4000
+AI_MODE=openai
+OPENAI_BASE_URL=https://api.openai.com/v1
+OPENAI_MODEL=gpt-4o-mini
+OPENAI_API_KEY=sk-your_real_key_here
+```
+
+`*.env` da nam trong `.gitignore`, khong commit API key.
+
+Neu muon demo offline, doi:
+
+```text
+AI_MODE=mock
+```
+
+## Chay Local
 
 ```bash
 cd ai-service
-# Tao .env tu .env.example va dien OPENAI_API_KEY
-set -a && source .env && set +a
 npm start
 ```
 
@@ -33,10 +49,8 @@ http://localhost:4000
 - `POST /ai/quiz`
 - `POST /ai/label`
 
-## Cau hinh OpenAI
+## Luu Y
 
-| Bien moi truong | Mac dinh | Mo ta |
-| --- | --- | --- |
-| `OPENAI_BASE_URL` | `https://api.openai.com/v1` | Base URL cua OpenAI API, khong them `/responses`. |
-| `OPENAI_MODEL` | `gpt-4o-mini` | Model dung de tao answer, quiz va concept label. |
-| `OPENAI_API_KEY` | — | API key bắt buộc; không commit vào git. |
+- Service tu doc `ai-service/.env`, khong can cai them `dotenv`.
+- Neu co `OPENAI_API_KEY` va `AI_MODE` khac `mock`, service se goi OpenAI that.
+- Neu `AI_MODE=openai` ma thieu key, service se bao loi ro rang.

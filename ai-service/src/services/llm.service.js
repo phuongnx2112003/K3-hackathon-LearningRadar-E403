@@ -1,5 +1,39 @@
 const DEFAULT_BASE_URL = "https://api.openai.com/v1";
 const DEFAULT_MODEL = "gpt-4o-mini";
+const { mockAiAnswer, mockQuiz } = require("../data/mock-ai-responses");
+
+function shouldUseOpenAi() {
+  if (process.env.AI_MODE === "mock") {
+    return false;
+  }
+
+  if (process.env.AI_MODE === "openai") {
+    return true;
+  }
+
+  return Boolean(process.env.OPENAI_API_KEY);
+}
+
+function getMockStructuredResponse(schemaName) {
+  const normalizedName = String(schemaName || "").toLowerCase();
+
+  if (normalizedName.includes("quiz")) {
+    return mockQuiz;
+  }
+
+  if (normalizedName.includes("concept")) {
+    return {
+      conceptId: mockAiAnswer.conceptId,
+      conceptLabel: mockAiAnswer.conceptLabel,
+      confidence: mockAiAnswer.confidence
+    };
+  }
+
+  return {
+    answer: mockAiAnswer.answer,
+    confidence: mockAiAnswer.confidence
+  };
+}
 
 function getOpenAiConfig() {
   const baseUrl = (process.env.OPENAI_BASE_URL || DEFAULT_BASE_URL).replace(/\/+$/, "");
@@ -39,6 +73,10 @@ function parseJsonOutput(outputText) {
 }
 
 async function generateStructuredResponse(prompt, schemaName) {
+  if (!shouldUseOpenAi()) {
+    return getMockStructuredResponse(schemaName);
+  }
+
   if (typeof fetch !== "function") {
     throw new Error("Global fetch is not available. Use Node 18 or newer.");
   }
@@ -89,5 +127,6 @@ async function generateTutorAnswer(prompt) {
 module.exports = {
   generateStructuredResponse,
   generateTutorAnswer,
+  getMockStructuredResponse,
   parseJsonOutput
 };

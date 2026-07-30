@@ -1,3 +1,5 @@
+require("./utils/env").loadEnv();
+
 const http = require("http");
 const { handleAskRoute } = require("./routes/ask.routes");
 const { handleLabelRoute } = require("./routes/label.routes");

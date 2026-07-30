@@ -1,19 +1,56 @@
-# Kịch bản Demo LearningRadar (Checkpoint 2 & 3)
+# Demo Script CP3 - LearningRadar
 
-## Luồng chính (Flow Demo)
+## Chuan Bi
 
-1. **Mở hệ thống:** Sinh viên mở trang LearningRadar và thấy một đoạn tài liệu/slide mẫu.
-2. **Tương tác ban đầu:** Sinh viên chọn hoặc dán đoạn kiến thức chưa hiểu vào ô nội dung.
-3. **Đặt câu hỏi:** Sinh viên gõ câu hỏi, ví dụ: *“Em chưa hiểu ý chính của đoạn này là gì?”*
-4. **Gửi yêu cầu:** Sinh viên bấm **Gửi**.
-5. **AI phản hồi:** Hệ thống hiện câu trả lời AI giả lập, kèm trích dẫn (citation) từ slide/transcript và nhãn kiến thức liên quan.
-6. **Xác nhận hiểu bài:** Sinh viên bấm **Đã hiểu** hoặc **Chưa hiểu**.
-7. **Kiểm tra (nếu Đã hiểu):** Hệ thống hiện quiz 5 câu để kiểm tra nhanh.
-8. **Hoàn tất (nếu Đạt):** Nếu quiz đạt từ 3/5 trở lên, flow kết thúc với trạng thái đã hiểu.
-9. **Cảnh báo (nếu Không đạt / Chưa hiểu):** Nếu bấm **Chưa hiểu** hoặc quiz dưới 3/5, hệ thống tự động tạo ticket.
-10. **Dashboard Giảng viên:** Giảng viên mở dashboard và thấy ticket gồm: câu hỏi của sinh viên, đoạn text liên quan, nhãn kiến thức yếu, lý do tạo ticket và trạng thái cần xử lý.
-11. **Hỗ trợ thực tế:** Giảng viên có thể nhận được yêu cầu và hỗ trợ online hoặc offline.
+Dam bao `ai-service/.env` co:
 
----
-**Tóm tắt kịch bản:** 
-Sinh viên hỏi AI trên đúng đoạn tài liệu, xác nhận đã hiểu hay chưa, làm quiz kiểm tra lại, và nếu còn chưa hiểu thì hệ thống đẩy vấn đề lên dashboard cho giảng viên can thiệp.
+```text
+AI_MODE=openai
+OPENAI_API_KEY=sk-...
+```
+
+Mo 3 terminal:
+
+```bash
+cd ai-service
+npm start
+```
+
+```bash
+cd backend
+npm start
+```
+
+```bash
+cd prototype
+npm run dev
+```
+
+## Loi Noi Demo 1-2 Phut
+
+LearningRadar la tinh nang giup sinh vien hoi AI ngay tren dung doan tai lieu dang kho hieu. Diem khac biet la he thong khong dung lai o viec AI tra loi, ma kiem tra xem sinh vien da hieu that chua va day tin hieu chua hieu len dashboard cho giang vien.
+
+## Flow Demo
+
+1. Mo trang prototype LearningRadar.
+2. UI tu tai slide PDF that tu `data/vlearn-pack/slides` va transcript that tu `data/vlearn-pack/transcript`.
+3. O man sinh vien, chon hoac dan mot doan text tren transcript.
+4. Nhap cau hoi: `Vi sao can xac dinh dung bai toan truoc khi dua AI vao san pham?`
+5. Bam **Gui cau hoi cho AI Tutor**.
+6. He thong goi backend `POST /api/tutor/ask`; backend goi AI service `/ai/ask`; AI service goi OpenAI that.
+7. Man hinh hien cau tra loi, citation va concept label.
+8. Bam **Da hieu** de mo quiz.
+9. Lam quiz 5 cau va nop bai.
+10. Neu dat tu 3/5 tro len, he thong hien pass.
+11. Lam nhanh thu nhanh khac: bam **Chua hieu**.
+12. He thong tao ticket qua backend `POST /api/tickets`.
+13. Chuyen sang tab giang vien, dashboard lay data tu `GET /api/dashboard/tickets` va hien ticket.
+14. Doi status ticket sang `reviewed` de chung minh dashboard goi API update.
+
+## Diem Can Nhan Manh
+
+- CP3 da co 3 lop: `prototype`, `backend`, `ai-service`.
+- Frontend khong goi truc tiep AI service.
+- Backend co fallback neu AI service loi, nhung ban test nop bai da chay voi `fallback=false`.
+- Quiz pass nguong 3/5; fail quiz tao ticket.
+- Dashboard giup giang vien thay concept nao dang co nhieu sinh vien vuong.
