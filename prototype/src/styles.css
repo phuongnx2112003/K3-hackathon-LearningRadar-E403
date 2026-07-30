@@ -45,6 +45,12 @@
   background: rgba(79, 70, 229, 0.42);
 }
 
+.pdf-text-layer span.pdf-citation-match {
+  background: rgba(250, 204, 21, 0.6);
+  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.42);
+  border-radius: 2px;
+}
+
 .citation-marker {
   color: #4f46e5;
   font-weight: 700;
@@ -359,6 +365,20 @@
   font-size: 1rem;
   padding: 26px 20px;
   text-align: center;
+}
+
+/* Give the tutor answer enough horizontal space for readable explanations and
+   citation cards, while keeping the PDF as the primary workspace. */
+.vlearn-app-container .tutor-panel {
+  flex: 0 0 460px;
+  width: 460px;
+}
+
+@media (max-width: 1199.98px) and (min-width: 992px) {
+  .vlearn-app-container .tutor-panel {
+    flex-basis: 400px;
+    width: 400px;
+  }
 }
 
 .lab-coach-dashboard {

@@ -32,7 +32,7 @@ async function createDocument({ lessonId, title, uploadedBy, file }) {
       documentId: id, lessonId, title, filename: file.filename,
       fileBase64: file.buffer.toString("base64")
     });
-    const document = { id, lessonId, title, filename, originalFilename: file.filename, uploadedBy, createdAt: new Date().toISOString(), chunkCount: indexed.chunkCount };
+    const document = { id, lessonId, title, filename, originalFilename: file.filename, uploadedBy, createdAt: new Date().toISOString(), chunkCount: indexed.chunkCount, pageCount: indexed.pageCount || null };
     const manifest = readManifest();
     manifest.documents.unshift(document);
     writeManifest(manifest);
@@ -64,7 +64,8 @@ function toLessons() {
     paragraphs: [],
     uploaded: true,
     documentId: document.id,
-    chunkCount: document.chunkCount
+    chunkCount: document.chunkCount,
+    pageCount: document.pageCount || null
   }));
 }
 

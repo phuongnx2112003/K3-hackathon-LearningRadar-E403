@@ -36,15 +36,33 @@ async function indexPdf({ documentId, lessonId, title, filename, fileBase64 }) {
   const chunks = pages.flatMap(({ page, text }) => chunkText(text).map((chunk) => ({ page, text: chunk })));
   if (!chunks.length) throw Object.assign(new Error("No readable text was found in this PDF"), { code: "PDF_TEXT_NOT_FOUND" });
   const embeddings = await embedTexts(chunks.map((chunk) => chunk.text), "RETRIEVAL_DOCUMENT");
+  // Re-indexing the same document must not retain stale chunks/metadata from
+  // an older parser version (for example chunks whose page was NULL).
+  await deleteChunksByDocument(documentId);
   await addChunks(chunks.map((chunk, index) => ({ id: `${documentId}:chunk:${index}`, text: chunk.text, embedding: embeddings[index], metadata: { documentId, lessonId: String(lessonId), title: title || filename || "PDF", filename: filename || "PDF", page: chunk.page, chunkIndex: index } })));
   return { documentId, chunkCount: chunks.length, pageCount: pages.length };
 }
 
 async function retrieveContext(question, lessonId, selectedText = "", selectedPages = []) {
   try {
-    const retrievalQuery = [question, selectedText].filter(Boolean).join("\n\nSelected course material:\n");
-    const [embedding] = await embedTexts([retrievalQuery], "RETRIEVAL_QUERY");
-    return await queryChunks(embedding, lessonId, 2, selectedPages);
+    const retrievalQueries = [
+      String(question || '').trim(),
+      String(selectedText || '').trim(),
+      [question, selectedText].filter(Boolean).join("\n\nSelected course material:\n")
+    ].filter(Boolean);
+    const embeddings = await embedTexts(retrievalQueries, "RETRIEVAL_QUERY");
+    const candidates = await Promise.all(embeddings.map((embedding, index) => (
+      queryChunks(embedding, lessonId, 6, selectedPages, retrievalQueries[index])
+    )));
+    const merged = new Map();
+    candidates.flat().forEach((chunk) => {
+      const key = `${chunk.metadata.documentId}:${chunk.metadata.chunkIndex}`;
+      const existing = merged.get(key);
+      if (!existing || chunk.rank < existing.rank) merged.set(key, chunk);
+    });
+    return Array.from(merged.values())
+      .sort((left, right) => left.rank - right.rank)
+      .slice(0, Number(process.env.RAG_CONTEXT_LIMIT) || 6);
   } catch (error) {
     console.warn(`RAG retrieval unavailable: ${error.message}`);
     return [];

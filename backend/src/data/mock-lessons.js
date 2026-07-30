@@ -71,11 +71,14 @@ function buildLesson(config) {
   const transcript = readTextFileSafe(transcriptPath);
   const paragraphs = extractParagraphs(transcript);
   const firstParagraph = paragraphs[0]?.text || "";
+  const slideKey = config.slideFile.replace(/\.pdf$/i, "");
+  const slidePageCount = getSlideManifest().slides?.[slideKey]?.pageCount;
 
   return {
     ...config,
     content: firstParagraph,
     paragraphs,
+    pageCount: Number(slidePageCount) || paragraphs.length || 1,
     slideExists: fs.existsSync(path.join(slidesDir, config.slideFile))
   };
 }

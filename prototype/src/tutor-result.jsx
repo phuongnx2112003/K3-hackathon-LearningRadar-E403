@@ -34,6 +34,25 @@ const TutorResult = ({ result, onUnderstand, onNotUnderstand, onCitationClick, l
 
   if (!result) return null;
 
+  const citations = result.citations?.length ? result.citations : [result.citation].filter(Boolean);
+  const referencedNumbers = new Set(
+    Array.from(String(result.answer || '').matchAll(/\[(\d+)\]/g))
+      .map((match) => Number(match[1]))
+      .filter((number) => number >= 1 && number <= citations.length)
+  );
+  // Retrieval can return extra context, but only sources explicitly cited in
+  // the answer should be shown as "Đoạn liên quan". Keep all sources as a
+  // fallback when an older model response contains no markers.
+  const displayedCitations = referencedNumbers.size
+    ? citations.map((citation, index) => ({ citation, number: index + 1 })).filter(({ number }) => referencedNumbers.has(number))
+    : citations.map((citation, index) => ({ citation, number: index + 1 }));
+  const citationNumberMap = new Map(displayedCitations.map(({ number }, index) => [number, index + 1]));
+  const answerWithRenumberedCitations = String(result.answer || '').replace(/\[(\d+)\]/g, (marker, number) => {
+    const nextNumber = citationNumberMap.get(Number(number));
+    return nextNumber ? `[${nextNumber}]` : marker;
+  });
+  const displayedCitationValues = displayedCitations.map(({ citation }) => citation);
+
   return (
     <div className="card border-primary border-2 shadow-sm p-3 mt-3 bg-white animate-fade-in">
       <div className="d-flex align-items-center justify-content-between mb-2">
@@ -45,13 +64,13 @@ const TutorResult = ({ result, onUnderstand, onNotUnderstand, onCitationClick, l
 
       {/* Answer Content */}
       <div className="p-3 rounded bg-light border mb-3 text-dark" style={{ whiteSpace: 'pre-line', fontSize: '0.925rem', lineHeight: '1.6' }}>
-        {renderAnswerWithCitations(result.answer, result.citations?.length ? result.citations : [result.citation].filter(Boolean), onCitationClick)}
+        {renderAnswerWithCitations(answerWithRenumberedCitations, displayedCitationValues, onCitationClick)}
       </div>
 
       {/* Citation Box */}
       <div className="p-2 mb-3 bg-warning-subtle text-warning-emphasis border border-warning rounded small">
-        📌 <strong>Đoạn liên quan</strong>{result.citations?.length ? ` · ${result.citations.length} đoạn` : ''}
-        {(result.citations?.length ? result.citations : [result.citation]).filter(Boolean).map((citation, index) => (
+        📌 <strong>Đoạn liên quan</strong>{displayedCitations.length ? ` · ${displayedCitations.length} đoạn` : ''}
+        {displayedCitations.map(({ citation, number }, index) => (
           <button
             type="button"
             className={`citation-card-button text-start w-100 border-0 bg-transparent p-0 ${index ? 'mt-2 pt-2 border-top border-warning' : 'mt-2'}`}

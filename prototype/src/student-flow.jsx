@@ -25,6 +25,51 @@ function cleanPdfText(value) {
     .trim();
 }
 
+function normaliseCitationText(value) {
+  return cleanPdfText(value).toLocaleLowerCase('vi-VN');
+}
+
+function clearCitationHighlights(container) {
+  container?.querySelectorAll('[data-citation-match="true"]').forEach((span) => {
+    span.dataset.citationMatch = 'false';
+    span.classList.remove('pdf-citation-match');
+  });
+}
+
+function highlightCitationQuote(pageElement, quote) {
+  const normalizedQuote = normaliseCitationText(quote);
+  const spans = Array.from(pageElement?.querySelectorAll('[data-pdf-text="true"]') || []);
+  if (!normalizedQuote || !spans.length) return null;
+
+  const pieces = [];
+  let pageText = '';
+  spans.forEach((span) => {
+    const text = normaliseCitationText(span.textContent);
+    if (!text) return;
+    const start = pageText.length + (pageText ? 1 : 0);
+    pageText += `${pageText ? ' ' : ''}${text}`;
+    pieces.push({ span, start, end: start + text.length });
+  });
+
+  let matchText = normalizedQuote;
+  let matchStart = pageText.indexOf(matchText);
+  // PDF text layers sometimes split punctuation or line endings differently.
+  // A long leading excerpt still identifies the cited region reliably.
+  if (matchStart < 0) {
+    matchText = normalizedQuote.split(' ').slice(0, 12).join(' ');
+    matchStart = matchText.length >= 24 ? pageText.indexOf(matchText) : -1;
+  }
+  if (matchStart < 0) return null;
+
+  const matchEnd = matchStart + matchText.length;
+  const matchedSpans = pieces.filter(({ start, end }) => start < matchEnd && end > matchStart);
+  matchedSpans.forEach(({ span }) => {
+    span.dataset.citationMatch = 'true';
+    span.classList.add('pdf-citation-match');
+  });
+  return matchedSpans[0]?.span || null;
+}
+
 function shortenCaseText(value, maxLength = 900) {
   const text = String(value || '').replace(/\s+/g, ' ').trim();
   return text.length > maxLength ? `${text.slice(0, maxLength).trim()}…` : text;
@@ -193,12 +238,17 @@ const StudentFlow = ({ user, onLogout, onSubmitQuestion, tickets: externalTicket
   const selectedPagesRef = useRef([]);
 
   const activeDataLesson = dataLessons.find((lesson) => lesson.lessonId === activeLessonId) || dataLessons[0];
+  const getLessonPageCount = (lesson) => (
+    lesson?.lessonId === activeLessonId && pdfPageCount
+      ? pdfPageCount
+      : Number(lesson?.pageCount) || lesson?.paragraphs?.length || 1
+  );
   const lessonView = activeDataLesson
     ? {
         id: activeDataLesson.slideFile || activeDataLesson.source,
         courseName: 'VLearn · Hackathon learning data',
         title: activeDataLesson.title,
-        totalPages: activeDataLesson.paragraphs?.length || 1,
+        totalPages: getLessonPageCount(activeDataLesson),
         currentPage: 1,
         source: activeDataLesson.source,
         slideUrl: getBackendAssetUrl(activeDataLesson.slideUrl),
@@ -209,7 +259,7 @@ const StudentFlow = ({ user, onLogout, onSubmitQuestion, tickets: externalTicket
             docs: dataLessons.map((lesson) => ({
               id: lesson.lessonId,
               title: lesson.title,
-              pages: lesson.paragraphs?.length || 1,
+              pages: getLessonPageCount(lesson),
               active: lesson.lessonId === activeLessonId
             }))
           }
@@ -228,32 +278,56 @@ const StudentFlow = ({ user, onLogout, onSubmitQuestion, tickets: externalTicket
     const source = String(citation?.source || '').trim();
     const page = Math.max(1, Number(citation?.page) || 1);
     const sourceKey = source.toLowerCase();
-    const targetLesson = dataLessons.find((lesson) => (
+    const targetLesson = dataLessons.find((lesson) => lesson.lessonId === citation?.lessonId) || dataLessons.find((lesson) => (
       [lesson.source, lesson.slideFile, lesson.title]
         .filter(Boolean)
         .some((value) => String(value).toLowerCase() === sourceKey)
     ));
 
     if (targetLesson?.lessonId) setActiveLessonId(targetLesson.lessonId);
-    setPendingCitation({ page, lessonId: targetLesson?.lessonId || activeLessonId });
+    setPendingCitation({
+      page,
+      quote: citation?.quote || '',
+      chunkIndex: Number.isInteger(Number(citation?.chunkIndex)) ? Number(citation.chunkIndex) : 0,
+      lessonId: targetLesson?.lessonId || citation?.lessonId || activeLessonId
+    });
     setNotification({ type: 'info', message: `Đang mở nguồn trích dẫn ở trang ${page}.` });
   }, [activeLessonId, dataLessons]);
 
   useEffect(() => {
     if (!pendingCitation || pendingCitation.lessonId !== activeLessonId || !pdfPagesContainerRef.current) return undefined;
 
-    const timer = window.setTimeout(() => {
+    let attempts = 0;
+    let timer;
+    const openCitation = () => {
       const target = pdfPagesContainerRef.current?.querySelector(
-        `[data-pdf-page="${pendingCitation.page}"]`
+        `[data-pdf-page-canvas="true"][data-pdf-page="${pendingCitation.page}"]`
       );
       if (target) {
         target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        setNotification({ type: 'success', message: `Đã mở trang ${pendingCitation.page} từ citation.` });
+        const pageElement = target.closest('section');
+        clearCitationHighlights(pdfPagesContainerRef.current);
+        const match = highlightCitationQuote(pageElement, pendingCitation.quote);
+        if (match) {
+          match.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          setNotification({ type: 'success', message: `Đã mở và đánh dấu đoạn trích dẫn ở trang ${pendingCitation.page}.` });
+          setPendingCitation(null);
+          return;
+        }
+        // The PDF page is lazily rendered. Retry briefly until its text layer
+        // is available, while retaining the page-level navigation as fallback.
+        if (attempts < 10) {
+          attempts += 1;
+          timer = window.setTimeout(openCitation, 150);
+          return;
+        }
+        setNotification({ type: 'warning', message: `Đã mở trang ${pendingCitation.page}, nhưng chưa tìm thấy đúng đoạn trích dẫn.` });
       } else {
         setNotification({ type: 'warning', message: `Không tìm thấy trang ${pendingCitation.page} trong PDF đang mở.` });
       }
       setPendingCitation(null);
-    }, pdfDocument ? 180 : 500);
+    };
+    timer = window.setTimeout(openCitation, pdfDocument ? 180 : 500);
 
     return () => window.clearTimeout(timer);
   }, [activeLessonId, pdfDocument, pendingCitation]);
@@ -1217,7 +1291,7 @@ const StudentFlow = ({ user, onLogout, onSubmitQuestion, tickets: externalTicket
           </main>
 
           {/* Right Panel: AI Tutor Drawer */}
-          <aside className="tutor-panel bg-white border-start p-3 overflow-auto" style={{ width: '400px' }}>
+          <aside className="tutor-panel bg-white border-start p-3 overflow-auto">
             <div className="d-flex align-items-center gap-2 mb-3 pb-2 border-bottom">
               <span className="fs-4">🤖</span>
               <div>

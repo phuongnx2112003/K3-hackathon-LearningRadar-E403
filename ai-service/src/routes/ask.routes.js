@@ -9,12 +9,15 @@ function isNonEmptyString(value) {
   return typeof value === "string" && value.trim().length > 0;
 }
 
-function toCitation(chunk) {
+function toCitation(chunk, lessonId) {
+  const page = Number(chunk.metadata?.page);
+  const chunkIndex = Number(chunk.metadata?.chunkIndex);
   return {
     source: chunk.metadata.filename,
     section: chunk.metadata.title,
-    page: chunk.metadata.page || null,
-    chunkIndex: chunk.metadata.chunkIndex,
+    lessonId: chunk.metadata.lessonId || lessonId || null,
+    page: Number.isInteger(page) && page > 0 ? page : 1,
+    chunkIndex: Number.isInteger(chunkIndex) && chunkIndex >= 0 ? chunkIndex : 0,
     quote: chunk.text.slice(0, 180),
     retrieval: "sqlite"
   };
@@ -67,7 +70,7 @@ async function handleAskRoute(req, res) {
 
     const prompt = buildTutorPrompt({ ...payload, relevantChunks });
     const tutorAnswer = await generateTutorAnswer(prompt);
-    const citations = relevantChunks.slice(0, 2).map(toCitation);
+    const citations = relevantChunks.slice(0, 6).map((chunk) => toCitation(chunk, payload.lessonId));
     sendOk(res, {
       answer: ensureCitationMarkers(tutorAnswer.answer, citations),
       citation: citations[0] || findCitation(payload),

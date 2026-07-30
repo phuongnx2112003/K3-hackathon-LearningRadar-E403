@@ -19,7 +19,7 @@ export default defineConfig(({ mode }) => {
       open: true,
       proxy: {
         '/api': {
-          target: env.VITE_BACKEND_TARGET || env.VITE_BACKEND_URL || 'http://localhost:3300',
+          target: env.VITE_BACKEND_TARGET || env.VITE_BACKEND_URL || 'http://localhost:3000',
           changeOrigin: true
         }
       }

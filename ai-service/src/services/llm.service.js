@@ -1,7 +1,10 @@
 const DEFAULT_BASE_URL = "https://api.openai.com/v1";
 const DEFAULT_MODEL = "gpt-4o-mini";
 const DEFAULT_LLM_TIMEOUT_MS = 30000;
-const DEFAULT_MAX_OUTPUT_TOKENS = 180;
+// Leave enough headroom for an adaptive, detailed explanation and its citation
+// markers. The prompt asks the model to stop when the concept is fully clear,
+// instead of forcing every answer to have a fixed number of words.
+const DEFAULT_MAX_OUTPUT_TOKENS = 2400;
 const { mockAiAnswer, mockQuiz } = require("../data/mock-ai-responses");
 
 async function fetchWithTimeout(url, options, timeoutMs = Number(process.env.LLM_TIMEOUT_MS) || DEFAULT_LLM_TIMEOUT_MS) {
@@ -103,7 +106,32 @@ function parseJsonOutput(outputText) {
     .replace(/^```(?:json)?\s*/i, "")
     .replace(/\s*```$/, "");
 
-  return JSON.parse(jsonText);
+  try {
+    return JSON.parse(jsonText);
+  } catch (error) {
+    // Some OpenAI-compatible endpoints stop at max_tokens without returning a
+    // useful finish reason. If the response is otherwise a JSON object, close
+    // only the unfinished string/object so the student still gets the answer.
+    const start = jsonText.indexOf("{");
+    if (start < 0) throw error;
+    const candidate = jsonText.slice(start).replace(/,\s*$/, "");
+    let inString = false;
+    let escaped = false;
+    let depth = 0;
+    for (const character of candidate) {
+      if (escaped) { escaped = false; continue; }
+      if (character === "\\" && inString) { escaped = true; continue; }
+      if (character === '"') { inString = !inString; continue; }
+      if (!inString && character === "{") depth += 1;
+      if (!inString && character === "}") depth -= 1;
+    }
+    const repaired = `${candidate}${inString ? '"' : ''}${"}".repeat(Math.max(depth, 0))}`;
+    try {
+      return JSON.parse(repaired);
+    } catch {
+      throw error;
+    }
+  }
 }
 
 async function generateStructuredResponse(prompt, schemaName) {
