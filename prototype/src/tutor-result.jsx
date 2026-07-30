@@ -59,7 +59,7 @@ const TutorResult = ({ result, onUnderstand, onNotUnderstand, loading }) => {
             className="btn btn-outline-danger flex-grow-1 font-weight-bold shadow-sm d-flex align-items-center justify-content-center gap-1 py-2"
             onClick={onNotUnderstand}
           >
-            👎 Chưa hiểu (Tạo Ticket TA)
+            👎 Chưa hiểu (Tạo Ticket Lab Coach)
           </button>
         </div>
       </div>

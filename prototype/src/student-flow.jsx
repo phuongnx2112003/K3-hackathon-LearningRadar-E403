@@ -4,7 +4,6 @@ import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { MOCK_LESSON, INITIAL_TICKETS, MOCK_AI_RESPONSE } from './mock-data';
 import TutorResult from './tutor-result';
 import QuizFlow from './quiz-flow';
-import TeacherDashboard from './teacher-dashboard';
 import {
   askTutor,
   createTicket as createTicketApi,
@@ -100,8 +99,7 @@ function PdfPage({ documentProxy, pageNumber, onTextMouseUp }) {
   );
 }
 
-const StudentFlow = ({ onSubmitQuestion }) => {
-  const [activeTab, setActiveTab] = useState('student'); // 'student' | 'teacher'
+const StudentFlow = ({ user, onLogout, onSubmitQuestion, tickets: externalTickets, onAddTicket }) => {
   const [toolMode, setToolMode] = useState('read'); // 'read' | 'pen' | 'highlight'
   const [selectedText, setSelectedText] = useState('');
   const [questionText, setQuestionText] = useState('');
@@ -687,30 +685,22 @@ const StudentFlow = ({ onSubmitQuestion }) => {
           )}
         </div>
 
-        {/* View Switcher & User Profile */}
+        {/* User Profile & Logout */}
         <div className="d-flex align-items-center gap-3">
-          <div className="btn-group btn-group-sm text-nowrap">
-            <button
-              className={`btn font-weight-bold text-nowrap ${activeTab === 'student' ? 'btn-primary' : 'btn-outline-primary'}`}
-              style={{ whiteSpace: 'nowrap' }}
-              onClick={() => setActiveTab('student')}
-            >
-              📖 Sinh viên (Slide Reader)
-            </button>
-            <button
-              className={`btn font-weight-bold text-nowrap ${activeTab === 'teacher' ? 'btn-dark' : 'btn-outline-dark'}`}
-              style={{ whiteSpace: 'nowrap' }}
-              onClick={() => setActiveTab('teacher')}
-            >
-              📊 Giảng viên {tickets.filter(t => t.status === 'Mới').length > 0 ? `(${tickets.filter(t => t.status === 'Mới').length})` : ''}
-            </button>
+          <div className="d-flex align-items-center gap-2 bg-light border px-3 py-1 rounded-pill small">
+            <span>{user?.avatar || '👤'}</span>
+            <strong className="small">{user?.name || 'Nguyễn Văn A (Học viên)'}</strong>
           </div>
 
-          <span className="badge bg-light text-dark border">VI</span>
-          <span className="badge bg-light text-dark border">🌙</span>
-          <div className="d-flex align-items-center gap-1 bg-light border px-2 py-1 rounded-pill small">
-            <span>👤</span> <strong className="small">Sinh viên ẩn danh</strong>
-          </div>
+          {onLogout && (
+            <button
+              className="btn btn-outline-danger btn-sm font-weight-bold d-flex align-items-center gap-1"
+              onClick={onLogout}
+              title="Đăng xuất khỏi hệ thống"
+            >
+              🚪 Đăng xuất
+            </button>
+          )}
         </div>
       </header>
 
@@ -735,8 +725,7 @@ const StudentFlow = ({ onSubmitQuestion }) => {
       )}
 
       {/* Main Workspace Body */}
-      {activeTab === 'student' ? (
-        <div className="d-flex flex-grow-1 overflow-hidden" style={{ minHeight: 'calc(100vh - 60px)' }}>
+      <div className="d-flex flex-grow-1 overflow-hidden" style={{ minHeight: 'calc(100vh - 60px)' }}>
           {/* Left Sidebar */}
           <aside className="bg-white border-end p-3 d-none d-lg-block" style={{ width: '280px' }}>
             <h6 className="font-weight-bold text-dark mb-1">📖 Học liệu môn học</h6>
@@ -938,12 +927,6 @@ const StudentFlow = ({ onSubmitQuestion }) => {
             )}
           </aside>
         </div>
-      ) : (
-        /* Teacher Dashboard Tab */
-        <div className="p-4 flex-grow-1">
-          <TeacherDashboard tickets={tickets} onUpdateTicketStatus={handleUpdateTicketStatus} />
-        </div>
-      )}
 
       {/* Quiz Modal */}
       {showQuiz && (

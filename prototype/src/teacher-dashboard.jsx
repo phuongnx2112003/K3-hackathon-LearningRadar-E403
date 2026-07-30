@@ -145,7 +145,7 @@ const TeacherDashboard = ({ tickets: initialTickets = [], onUpdateTicketStatus }
       <div className="d-flex align-items-center justify-content-between mb-4 pb-3 border-bottom">
         <div>
           <div className="d-flex align-items-center gap-2">
-            <h4 className="font-weight-bold text-dark mb-0">📊 Dashboard Giảng Viên & TA (LearningRadar)</h4>
+            <h4 className="font-weight-bold text-dark mb-0">📊 Dashboard Lab Coach (LearningRadar)</h4>
             <span className={`badge ${isBackendLive ? 'bg-success-subtle text-success border border-success' : 'bg-secondary-subtle text-secondary border'}`} style={{ fontSize: '0.75rem' }}>
               {isBackendLive ? '⚡ Backend API Online' : '🏠 Local Mock Mode'}
             </span>
