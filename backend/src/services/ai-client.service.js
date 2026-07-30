@@ -95,6 +95,32 @@ async function generateQuiz(payload) {
   }
 }
 
+async function generateQuizReview(payload) {
+  try {
+    return await postToAiService("/ai/quiz-review", payload);
+  } catch (error) {
+    return {
+      review: [],
+      fallback: true
+    };
+  }
+}
+
+async function analyzeSlideRegion(payload) {
+  try {
+    return await postToAiService("/ai/slide-region", payload);
+  } catch (error) {
+    const textHint = String(payload.textHint || "").trim();
+    return {
+      selectedText: textHint || "Không OCR được vùng ảnh vì AI service/vision model chưa sẵn sàng. Hãy kiểm tra AI_MODE=openai, OPENAI_API_KEY và AI_SERVICE_URL.",
+      description: error.message,
+      regionType: textHint ? "text" : "unclear",
+      confidence: textHint ? 0.45 : 0.2,
+      mode: "vision-fallback"
+    };
+  }
+}
+
 async function labelConcept(payload) {
   try {
     return await postToAiService("/ai/label", payload);
@@ -110,6 +136,8 @@ async function labelConcept(payload) {
 
 module.exports = {
   askTutor,
+  analyzeSlideRegion,
   generateQuiz,
+  generateQuizReview,
   labelConcept
 };

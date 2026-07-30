@@ -1,6 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const { getLessons, getSlidePageImagePath, getSlidePath } = require("../data/mock-lessons");
+const { analyzeSlideRegion } = require("../services/ai-client.service");
 const { recognizeSlideRegion } = require("../services/slide-region.service");
 const { readJson, sendError, sendOk } = require("../utils/response");
 
@@ -29,6 +30,33 @@ function sendPng(res, imagePath) {
   res.end(body);
 }
 
+function buildRegionFallback(payload = {}, result = null) {
+  const textHint = String(payload.textHint || result?.selectedText || "").replace(/\s+/g, " ").trim();
+
+  if (!textHint && !payload.imageDataUrl) {
+    return null;
+  }
+
+  return {
+    ...(result || {}),
+    slideFile: result?.slideFile || payload.slideFile || "",
+    slideSlug: result?.slideSlug || String(payload.slideFile || "").replace(/\.pdf$/i, ""),
+    page: result?.page || Math.max(1, Number(payload.page) || 1),
+    bbox: result?.bbox || payload.bbox || null,
+    selectedText:
+      textHint ||
+      "Vùng khoanh là ảnh hoặc sơ đồ trong slide. AI vision/OCR chưa trả về mô tả chi tiết, hãy kiểm tra AI service và OpenAI API key.",
+    description: textHint
+      ? "Fallback: lấy được chữ từ text layer của PDF nên chưa cần gọi OCR."
+      : "Fallback: có ảnh vùng khoanh nhưng chưa nhận được mô tả từ AI vision/OCR.",
+    matchedBlocks: result?.matchedBlocks || [],
+    regionType: textHint ? "text" : "unclear",
+    confidence: textHint ? 0.7 : 0.25,
+    mode: textHint ? "text-hint-fallback" : "vision-fallback",
+    fallback: true
+  };
+}
+
 async function handleLessonRoutes(req, res, url) {
   if (url.pathname === "/api/slide-region/recognize") {
     if (req.method !== "POST") {
@@ -37,7 +65,19 @@ async function handleLessonRoutes(req, res, url) {
     }
 
     const payload = await readJson(req);
-    const result = recognizeSlideRegion(payload);
+    let result = recognizeSlideRegion(payload);
+    if (payload.imageDataUrl) {
+      const visionResult = await analyzeSlideRegion(payload);
+      result = {
+        ...(result || {}),
+        ...visionResult,
+        selectedText: visionResult.selectedText || result?.selectedText || "",
+        description: visionResult.description || "",
+        mode: visionResult.mode || "vision"
+      };
+    }
+
+    result = result || buildRegionFallback(payload, result);
 
     if (!result) {
       sendError(res, 404, "REGION_NOT_FOUND", "Cannot recognize this slide region");

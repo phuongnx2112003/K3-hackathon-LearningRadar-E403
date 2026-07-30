@@ -19,7 +19,7 @@ async function handleQuizRoutes(req, res, url) {
 
     if (req.method === "POST" && url.pathname === "/api/quiz/submit") {
       const payload = await readJson(req);
-      const data = submitQuiz(payload);
+      const data = await submitQuiz(payload);
       sendOk(res, data);
       return;
     }

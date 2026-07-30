@@ -3,7 +3,9 @@ require("./utils/env").loadEnv();
 const http = require("http");
 const { handleAskRoute } = require("./routes/ask.routes");
 const { handleLabelRoute } = require("./routes/label.routes");
+const { handleQuizReviewRoute } = require("./routes/quiz-review.routes");
 const { handleQuizRoute } = require("./routes/quiz.routes");
+const { handleSlideRegionRoute } = require("./routes/slide-region.routes");
 const { sendError, sendOk, sendOptions } = require("./utils/response");
 
 const PORT = Number(process.env.PORT) || 4000;
@@ -11,6 +13,8 @@ const PORT = Number(process.env.PORT) || 4000;
 const routes = {
   "/ai/ask": handleAskRoute,
   "/ai/quiz": handleQuizRoute,
+  "/ai/quiz-review": handleQuizReviewRoute,
+  "/ai/slide-region": handleSlideRegionRoute,
   "/ai/label": handleLabelRoute
 };
 

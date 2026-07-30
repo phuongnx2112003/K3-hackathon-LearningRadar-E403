@@ -29,7 +29,11 @@ async function generateQuiz(payload = {}) {
       id: typeof question.id === "string" && question.id.trim() ? question.id : `q${index + 1}`,
       question: question.question,
       options: question.options,
-      correctIndex: question.correctIndex
+      correctIndex: question.correctIndex,
+      explanation:
+        typeof question.explanation === "string" && question.explanation.trim()
+          ? question.explanation.trim()
+          : ""
     };
   });
 
