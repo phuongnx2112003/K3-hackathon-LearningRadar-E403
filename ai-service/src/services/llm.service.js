@@ -1,5 +1,3 @@
-const { mockAiAnswer } = require("../data/mock-ai-responses");
-
 const DEFAULT_BASE_URL = "https://api.openai.com/v1";
 const DEFAULT_MODEL = "gpt-4o-mini";
 
@@ -9,7 +7,7 @@ function getOpenAiConfig() {
   const apiKey = process.env.OPENAI_API_KEY;
 
   if (!apiKey) {
-    throw new Error("OPENAI_API_KEY is required when AI_MODE is openai");
+    throw new Error("OPENAI_API_KEY is required");
   }
 
   return { apiKey, baseUrl, model };
@@ -41,10 +39,6 @@ function parseJsonOutput(outputText) {
 }
 
 async function generateStructuredResponse(prompt, schemaName) {
-  if ((process.env.AI_MODE || "openai").toLowerCase() === "mock") {
-    return null;
-  }
-
   if (typeof fetch !== "function") {
     throw new Error("Global fetch is not available. Use Node 18 or newer.");
   }
@@ -80,17 +74,7 @@ async function generateStructuredResponse(prompt, schemaName) {
 }
 
 async function generateTutorAnswer(prompt) {
-  const result = await generateStructuredResponse(
-    `${prompt}\n\nTra ve JSON duy nhat: {"answer":"string", "confidence":0.0}.`,
-    "Tutor"
-  );
-
-  if (result === null) {
-    return {
-      answer: mockAiAnswer.answer,
-      confidence: mockAiAnswer.confidence
-    };
-  }
+  const result = await generateStructuredResponse(prompt, "Tutor");
 
   if (typeof result.answer !== "string" || !Number.isFinite(result.confidence)) {
     throw new Error("Tutor response must contain answer (string) and confidence (number)");

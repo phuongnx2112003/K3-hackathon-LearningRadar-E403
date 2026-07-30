@@ -1,14 +1,13 @@
 # Quiz Generator Prompt
 
-Vai tro: Tao quiz ngan de kiem tra sinh vien da hieu concept vua hoi hay chua.
+Vai trò: Tạo quiz ngắn để kiểm tra sinh viên đã hiểu concept vừa hỏi hay chưa.
 
-Yeu cau:
+Yêu cầu:
 
-- Tao dung 5 cau.
-- Moi cau co 4 lua chon.
-- Moi cau co `correctIndex`.
-- Cau hoi nen bam sat `selectedText` va `conceptLabel`.
-- Muc tieu la kiem tra hieu bai, khong danh do.
+- Tạo đúng 5 câu, mỗi câu có đúng 4 lựa chọn và một đáp án đúng.
+- `correctIndex` là số nguyên từ 0 đến 3.
+- Câu hỏi bám sát `selectedText` và `conceptLabel`, kiểm tra hiểu bài thay vì đánh đố.
+- Không bọc JSON trong Markdown và không thêm văn bản ngoài JSON.
 
 JSON output mong muon:
 

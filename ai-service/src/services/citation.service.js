@@ -1,8 +1,16 @@
-function findCitation() {
+function nonEmptyString(value) {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function findCitation(payload = {}) {
+  if (!nonEmptyString(payload.selectedText)) {
+    throw new Error("selectedText is required to create a citation");
+  }
+
   return {
-    source: "transcript-01-clean.md",
-    section: "Dropout train vs inference",
-    quote: "Khi train co dropout; khi inference tat ca neuron duoc bat."
+    source: nonEmptyString(payload.source) ? payload.source.trim() : "student-selected-text",
+    section: nonEmptyString(payload.section) ? payload.section.trim() : "Selected text",
+    quote: payload.selectedText.trim()
   };
 }
 
