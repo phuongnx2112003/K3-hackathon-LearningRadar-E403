@@ -24,11 +24,11 @@ async function handleTicketRoutes(req, res) {
     // Body: { "id": "ticket-001", "status": "reviewed" }
     try {
       const payload = await readJson(req);
-      if (!payload.id || !payload.status) {
-        sendError(res, 400, "VALIDATION_ERROR", "id va status la bat buoc");
+      if (!payload.id || (!payload.status && !payload.teacherFeedback && !payload.feedbackMessage && !payload.message)) {
+        sendError(res, 400, "VALIDATION_ERROR", "id va status hoac teacherFeedback la bat buoc");
         return;
       }
-      const ticket = updateTicketStatus(payload.id, payload.status);
+      const ticket = updateTicketStatus(payload.id, payload.status, payload);
       sendOk(res, { ticket });
     } catch (error) {
       const code = error.code || "UPDATE_TICKET_FAILED";
