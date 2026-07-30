@@ -65,13 +65,13 @@ const TeacherDashboard = ({ tickets: initialTickets = [], onUpdateTicketStatus }
   const handleFeedbackSubmit = async (ticket) => {
     const message = (feedbackDrafts[ticket.id] || '').trim();
     if (!message) {
-      setActionMessage('Hay nhap noi dung feedback truoc khi gui.');
+      setActionMessage('Hãy nhập nội dung feedback trước khi gửi.');
       return;
     }
 
     const localReply = {
       id: `local-reply-${Date.now()}`,
-      teacherName: 'Giang vien/TA',
+      teacherName: 'Giảng viên/TA',
       message,
       createdAt: new Date().toISOString()
     };
@@ -94,9 +94,9 @@ const TeacherDashboard = ({ tickets: initialTickets = [], onUpdateTicketStatus }
       }
 
       setFeedbackDrafts(prev => ({ ...prev, [ticket.id]: '' }));
-      setActionMessage(`Da gui phan hoi cho sinh vien o ticket ${ticket.id}.`);
+      setActionMessage(`Đã gửi phản hồi cho sinh viên ở ticket ${ticket.id}.`);
     } catch (err) {
-      setActionMessage(`Khong gui duoc feedback: ${err.message}`);
+      setActionMessage(`Không gửi được feedback: ${err.message}`);
     }
   };
 
@@ -289,7 +289,7 @@ const TeacherDashboard = ({ tickets: initialTickets = [], onUpdateTicketStatus }
                         setSelectedTicketId(t.id);
                       }}
                     >
-                      Mo / tra loi
+                      Mở / trả lời
                     </button>
                   </td>
                 </tr>
@@ -309,9 +309,9 @@ const TeacherDashboard = ({ tickets: initialTickets = [], onUpdateTicketStatus }
         <div className="border rounded-3 p-3 mt-3 bg-light">
           <div className="d-flex align-items-start justify-content-between gap-3 mb-3">
             <div>
-              <h5 className="mb-1 text-dark">Tra loi sinh vien - {selectedTicket.id}</h5>
+              <h5 className="mb-1 text-dark">Trả lời sinh viên - {selectedTicket.id}</h5>
               <div className="small text-muted">
-                {selectedTicket.studentName || selectedTicket.studentId || 'Sinh vien an danh'} · {selectedTicket.createdAt}
+                {selectedTicket.studentName || selectedTicket.studentId || 'Sinh viên ẩn danh'} · {selectedTicket.createdAt}
               </div>
             </div>
             <div>{getStatusBadge(selectedTicket.status)}</div>
@@ -320,9 +320,9 @@ const TeacherDashboard = ({ tickets: initialTickets = [], onUpdateTicketStatus }
           <div className="row g-3">
             <div className="col-lg-6">
               <div className="bg-white border rounded-3 p-3 h-100">
-                <div className="small text-muted fw-bold mb-1">Cau hoi cua sinh vien</div>
+                <div className="small text-muted fw-bold mb-1">Câu hỏi của sinh viên</div>
                 <p className="mb-2">{selectedTicket.question}</p>
-                <div className="small text-muted fw-bold mb-1">Doan sinh vien chon</div>
+                <div className="small text-muted fw-bold mb-1">Đoạn sinh viên chọn</div>
                 <div className="small text-dark" style={{ whiteSpace: 'pre-wrap' }}>
                   {selectedTicket.selectedText}
                 </div>
@@ -332,12 +332,12 @@ const TeacherDashboard = ({ tickets: initialTickets = [], onUpdateTicketStatus }
             <div className="col-lg-6">
               <div className="bg-white border rounded-3 p-3 h-100">
                 <label className="form-label small text-muted fw-bold">
-                  Feedback gui truc tiep cho sinh vien
+                  Feedback gửi trực tiếp cho sinh viên
                 </label>
                 <textarea
                   className="form-control"
                   rows="4"
-                  placeholder="Nhap giai thich ngan gon, goi y xem lai slide/trich dan, hoac hen sinh vien hoi tiep..."
+                  placeholder="Nhập giải thích ngắn gọn, gợi ý xem lại slide/trích dẫn, hoặc hẹn sinh viên hỏi tiếp..."
                   value={feedbackDrafts[selectedTicket.id] || ''}
                   onChange={(e) => setFeedbackDrafts(prev => ({ ...prev, [selectedTicket.id]: e.target.value }))}
                 />
@@ -347,23 +347,23 @@ const TeacherDashboard = ({ tickets: initialTickets = [], onUpdateTicketStatus }
                     className="btn btn-primary btn-sm fw-bold"
                     onClick={() => handleFeedbackSubmit(selectedTicket)}
                   >
-                    Gui phan hoi cho sinh vien
+                    Gửi phản hồi cho sinh viên
                   </button>
                   <button
                     type="button"
                     className="btn btn-outline-success btn-sm"
                     onClick={() => handleStatusChange(selectedTicket.id, 'closed')}
                   >
-                    Danh dau da xu ly
+                    Đánh dấu đã xử lý
                   </button>
                 </div>
 
                 {(selectedTicket.teacherReplies || []).length > 0 && (
                   <div className="mt-3">
-                    <div className="small text-muted fw-bold mb-2">Lich su phan hoi</div>
+                    <div className="small text-muted fw-bold mb-2">Lịch sử phản hồi</div>
                     {(selectedTicket.teacherReplies || []).map((reply) => (
                       <div key={reply.id} className="border rounded-3 p-2 mb-2 small bg-light">
-                        <strong>{reply.teacherName || 'Giang vien/TA'}</strong>
+                        <strong>{reply.teacherName || 'Giảng viên/TA'}</strong>
                         <span className="text-muted ms-2">{reply.createdAt}</span>
                         <div className="mt-1">{reply.message}</div>
                       </div>

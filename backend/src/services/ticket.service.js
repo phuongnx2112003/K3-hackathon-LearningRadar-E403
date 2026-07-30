@@ -12,7 +12,7 @@ function buildTeacherReply(payload) {
 
   return {
     id: `reply-${Date.now()}`,
-    teacherName: payload.teacherName || "Giang vien/TA",
+    teacherName: payload.teacherName || "Giảng viên/TA",
     message,
     createdAt: new Date().toISOString()
   };

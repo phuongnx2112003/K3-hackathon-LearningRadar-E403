@@ -912,7 +912,7 @@ const StudentFlow = ({ onSubmitQuestion }) => {
             {teacherFeedbackTickets.length > 0 && (
               <div className="mt-3 border rounded-3 p-3 bg-light">
                 <div className="d-flex align-items-center justify-content-between mb-2">
-                  <strong className="text-dark">Phan hoi tu giang vien</strong>
+                  <strong className="text-dark">Phản hồi từ giảng viên</strong>
                   <span className="badge bg-success">{teacherFeedbackTickets.length} ticket</span>
                 </div>
                 {teacherFeedbackTickets.slice(0, 3).map((ticket) => (
@@ -921,15 +921,15 @@ const StudentFlow = ({ onSubmitQuestion }) => {
                       <strong>{ticket.conceptLabel || ticket.id}</strong>
                       <span className="text-muted">{ticket.lastFeedbackAt || ticket.createdAt}</span>
                     </div>
-                    <div className="text-muted mt-1">Ve cau hoi: "{ticket.question}"</div>
+                    <div className="text-muted mt-1">Về câu hỏi: "{ticket.question}"</div>
                     {(ticket.teacherReplies || []).map((reply) => (
                       <div key={reply.id} className="mt-2 p-2 rounded-2" style={{ background: '#ecfdf5', color: '#065f46' }}>
-                        <strong>{reply.teacherName || 'Giang vien/TA'}:</strong> {reply.message}
+                        <strong>{reply.teacherName || 'Giảng viên/TA'}:</strong> {reply.message}
                       </div>
                     ))}
                     {ticket.teacherFeedback && (!ticket.teacherReplies || ticket.teacherReplies.length === 0) && (
                       <div className="mt-2 p-2 rounded-2" style={{ background: '#ecfdf5', color: '#065f46' }}>
-                        <strong>Giang vien/TA:</strong> {ticket.teacherFeedback}
+                        <strong>Giảng viên/TA:</strong> {ticket.teacherFeedback}
                       </div>
                     )}
                   </div>

@@ -88,7 +88,7 @@ export function sendTicketFeedback(id, teacherFeedback, status = "reviewed") {
       id,
       status,
       teacherFeedback,
-      teacherName: "Giang vien/TA"
+      teacherName: "Giảng viên/TA"
     })
   });
 }
