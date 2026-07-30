@@ -1,8 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { MOCK_LESSON, MOCK_AI_RESPONSE, INITIAL_TICKETS } from './mock-data';
+import { MOCK_LESSON, INITIAL_TICKETS } from './mock-data';
 import TutorResult from './tutor-result';
 import QuizFlow from './quiz-flow';
 import TeacherDashboard from './teacher-dashboard';
+import { askTutor } from './api-client';
 
 const StudentFlow = () => {
   const [activeTab, setActiveTab] = useState('student'); // 'student' | 'teacher'
@@ -119,7 +120,7 @@ const StudentFlow = () => {
   };
 
   // Step 4: Click Gửi (Send)
-  const handleSend = () => {
+  const handleSend = async () => {
     if (!questionText.trim() || !selectedText.trim()) {
       setNotification({
         type: 'warning',
@@ -130,14 +131,22 @@ const StudentFlow = () => {
     setLoading(true);
     setTutorResult(null);
 
-    setTimeout(() => {
-      setLoading(false);
-      setTutorResult({
-        ...MOCK_AI_RESPONSE,
-        userQuestion: questionText || 'Giải thích đoạn văn bản này',
-        selectedText: selectedText || MOCK_LESSON.paragraphs[1].text
+    try {
+      const response = await askTutor({
+        lessonId: 'lesson-01',
+        studentId: 'student-demo-01',
+        selectedText,
+        question: questionText
       });
-    }, 700);
+      setTutorResult(response);
+    } catch (error) {
+      setNotification({
+        type: 'danger',
+        message: error.message || 'Không thể nhận câu trả lời từ backend. Hãy thử lại.'
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   // Step 6: User clicks "Đã hiểu" -> Launch Quiz
@@ -469,6 +478,11 @@ const StudentFlow = () => {
       {/* Quiz Modal */}
       {showQuiz && (
         <QuizFlow
+          context={{
+            lessonId: 'lesson-01',
+            studentId: 'student-demo-01',
+            conceptId: tutorResult?.conceptId || 'concept-dropout-01'
+          }}
           onClose={() => setShowQuiz(false)}
           onQuizComplete={handleQuizComplete}
         />

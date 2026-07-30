@@ -111,10 +111,16 @@ function submitQuiz(payload) {
     throw error;
   }
 
-  const score = answers.reduce((total, answer) => {
+  const review = answers.map((answer) => {
     const question = quiz.questions.find((item) => item.id === answer.questionId);
-    return total + (question && question.correctIndex === answer.selectedIndex ? 1 : 0);
+    return {
+      questionId: answer.questionId,
+      selectedIndex: answer.selectedIndex,
+      correctIndex: question?.correctIndex ?? null,
+      correct: Boolean(question && question.correctIndex === answer.selectedIndex)
+    };
   }, 0);
+  const score = review.filter((item) => item.correct).length;
 
   const total = quiz.questions.length;
   const passThreshold = 3;
@@ -123,7 +129,8 @@ function submitQuiz(payload) {
     score,
     total,
     passed: score >= passThreshold,
-    passThreshold
+    passThreshold,
+    review
   };
 }
 

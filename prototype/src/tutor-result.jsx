@@ -1,5 +1,14 @@
 import React from 'react';
 
+function formatCitation(citation) {
+  if (!citation) return 'Chưa có trích dẫn.';
+  if (typeof citation === 'string') return citation;
+
+  return `${citation.source || 'Nguồn học liệu'} · ${citation.section || 'Đoạn liên quan'}${
+    citation.quote ? `\n“${citation.quote}”` : ''
+  }`;
+}
+
 const TutorResult = ({ result, onUnderstand, onNotUnderstand, loading }) => {
   if (loading) {
     return (
@@ -28,8 +37,9 @@ const TutorResult = ({ result, onUnderstand, onNotUnderstand, loading }) => {
       </div>
 
       {/* Citation Box */}
-      <div className="p-2 mb-3 bg-warning-subtle text-warning-emphasis border border-warning rounded small font-monospace">
-        📌 <strong>{result.citation}</strong>
+      <div className="p-2 mb-3 bg-warning-subtle text-warning-emphasis border border-warning rounded small" style={{ whiteSpace: 'pre-line' }}>
+        📌 <strong>Trích dẫn</strong><br />
+        {formatCitation(result.citation)}
       </div>
 
       {/* Decision Buttons (Step 6 of CP2) */}
@@ -41,6 +51,7 @@ const TutorResult = ({ result, onUnderstand, onNotUnderstand, loading }) => {
           <button
             className="btn btn-success flex-grow-1 font-weight-bold shadow-sm d-flex align-items-center justify-content-center gap-1 py-2"
             onClick={onUnderstand}
+            disabled={!onUnderstand}
           >
             👍 Đã hiểu (Làm Quiz 5 câu)
           </button>
