@@ -44,6 +44,14 @@ export function createTicket(payload) {
   });
 }
 
-export function getDashboardTickets() {
-  return request("/api/dashboard/tickets");
+export function updateTicketStatus(id, status) {
+  return request("/api/tickets", {
+    method: "PATCH",
+    body: JSON.stringify({ id, status })
+  });
+}
+
+export function getDashboardTickets(status) {
+  const query = status && status !== "All" ? `?status=${encodeURIComponent(status)}` : "";
+  return request(`/api/dashboard/tickets${query}`);
 }
