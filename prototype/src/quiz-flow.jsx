@@ -22,7 +22,15 @@ const QuizFlow = ({ onClose, onQuizComplete }) => {
     setSubmitted(true);
 
     const isPassed = correctCount >= 4; // Pass threshold: 4/5
-    onQuizComplete(correctCount, isPassed);
+    if (onQuizComplete) {
+      onQuizComplete(correctCount, isPassed);
+    }
+  };
+
+  const handleRetry = () => {
+    setAnswers({});
+    setSubmitted(false);
+    setScore(0);
   };
 
   return (
@@ -72,31 +80,84 @@ const QuizFlow = ({ onClose, onQuizComplete }) => {
                 ))}
               </div>
             ) : (
-              <div className="text-center py-4">
-                {score >= 4 ? (
-                  <div>
-                    <div className="display-1 text-success mb-2">🎉</div>
-                    <h3 className="font-weight-bold text-success">XUẤT SẮC! ĐÃ VƯỢT QUA QUIZ</h3>
-                    <h4 className="font-weight-bold mb-3">Kết quả: {score} / 5 câu chính xác</h4>
-                    <p className="text-muted">
-                      Tín hiệu hiểu bài của bạn đã được cập nhật vào hệ thống VLearn LearningRadar!
-                    </p>
-                  </div>
-                ) : (
-                  <div>
-                    <div className="display-1 text-danger mb-2">⚠️</div>
-                    <h3 className="font-weight-bold text-danger">CHƯA VƯỢT QUA QUIZ</h3>
-                    <h4 className="font-weight-bold mb-3">Kết quả: {score} / 5 câu (Cần $\ge 4$ câu)</h4>
-                    <div className="alert alert-danger mx-auto p-3" style={{ maxWidth: 500 }}>
-                      🔴 <strong>Đã tự động tạo Ticket gửi đến Giảng viên/TA!</strong> TA sẽ chủ động liên hệ để hỗ trợ giải đáp lại khái niệm này cho bạn.
+              <div>
+                {/* Result Summary Header */}
+                <div className="text-center py-3 mb-4 bg-white rounded-4 border p-3 shadow-sm">
+                  {score >= 4 ? (
+                    <div>
+                      <div className="fs-1 text-success mb-1">🎉</div>
+                      <h4 className="font-weight-bold text-success">XUẤT SẮC! ĐÃ VƯỢT QUA QUIZ</h4>
+                      <h5 className="font-weight-bold mb-1">Kết quả: {score} / 5 câu chính xác</h5>
+                      <p className="text-muted small mb-0">
+                        Tín hiệu hiểu bài của bạn đã được ghi nhận vào hệ thống VLearn!
+                      </p>
                     </div>
-                  </div>
-                )}
+                  ) : (
+                    <div>
+                      <div className="fs-1 text-warning mb-1">💡</div>
+                      <h4 className="font-weight-bold text-warning-emphasis">CẦN CỦNG CỐ LẠI KIẾN THỨC</h4>
+                      <h5 className="font-weight-bold mb-2">Kết quả: {score} / 5 câu chính xác</h5>
+                      <p className="text-dark small mb-0">
+                        AI Tutor đã tự động tổng hợp <strong>giải thích chi tiết cho các câu trả lời chưa đúng</strong> bên dưới để giúp bạn nắm vững kiến thức mà không cần gửi ticket!
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Detailed Review Breakdown for Wrong Answers */}
+                <h6 className="font-weight-bold text-dark mb-3">🔍 Chi Tiết Phân Tích & Giải Thích Lại Từ AI Tutor:</h6>
+
+                {MOCK_QUIZ.map((q) => {
+                  const userAnswer = answers[q.id];
+                  const isCorrect = userAnswer === q.correctAnswer;
+
+                  return (
+                    <div
+                      key={q.id}
+                      className={`card border-0 shadow-sm mb-3 p-3 bg-white border-start border-4 ${
+                        isCorrect ? 'border-success' : 'border-danger'
+                      }`}
+                    >
+                      <div className="d-flex align-items-center justify-content-between mb-2">
+                        <strong className="text-dark">{q.question}</strong>
+                        <span className={`badge ${isCorrect ? 'bg-success' : 'bg-danger'}`}>
+                          {isCorrect ? 'ĐÚNG' : 'CHƯA CHÍNH XÁC'}
+                        </span>
+                      </div>
+
+                      <div className="small mb-2">
+                        <span>Lựa chọn của bạn: </span>
+                        <strong className={isCorrect ? 'text-success' : 'text-danger'}>
+                          {userAnswer || 'Chưa chọn'}
+                        </strong>
+                        {!isCorrect && (
+                          <span className="ms-3 text-success font-weight-bold">
+                            ➔ Đáp án đúng: {q.correctAnswer}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* AI Re-explanation for wrong answers */}
+                      {!isCorrect && (
+                        <div className="p-3 bg-warning-subtle text-warning-emphasis rounded-3 border border-warning small mt-2">
+                          <strong className="d-block mb-1">💡 AI Tutor Giải Thích Lại:</strong>
+                          {q.explanation}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
 
-          <div className="modal-footer bg-white border-top">
+          <div className="modal-footer bg-white border-top d-flex justify-content-between">
+            {submitted && score < 4 ? (
+              <button className="btn btn-outline-primary font-weight-bold" onClick={handleRetry}>
+                🔄 Làm lại Quiz ngay
+              </button>
+            ) : <div></div>}
+
             {!submitted ? (
               <button
                 className="btn btn-primary px-4 font-weight-bold"
