@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { MOCK_LESSON, MOCK_AI_RESPONSE, INITIAL_TICKETS } from './mock-data';
 import TutorResult from './tutor-result';
 import QuizFlow from './quiz-flow';
@@ -6,6 +6,7 @@ import TeacherDashboard from './teacher-dashboard';
 
 const StudentFlow = () => {
   const [activeTab, setActiveTab] = useState('student'); // 'student' | 'teacher'
+  const [toolMode, setToolMode] = useState('read'); // 'read' | 'pen' | 'highlight'
   const [selectedText, setSelectedText] = useState('');
   const [questionText, setQuestionText] = useState('');
   const [loading, setLoading] = useState(false);
@@ -14,12 +15,89 @@ const StudentFlow = () => {
   const [tickets, setTickets] = useState(INITIAL_TICKETS);
   const [notification, setNotification] = useState(null);
 
-  // Highlighting text handler
-  const handleMouseUp = () => {
-    const text = window.getSelection().toString().trim();
-    if (text && text.length > 5) {
-      setSelectedText(text);
+  // Exact Highlighted Text List
+  const [highlightedSnippets, setHighlightedSnippets] = useState([]);
+
+  // Canvas Freehand Drawing State
+  const canvasRef = useRef(null);
+  const [isDrawing, setIsDrawing] = useState(false);
+  const [prevPos, setPrevPos] = useState({ x: 0, y: 0 });
+  const [hasDrawings, setHasDrawings] = useState(false);
+
+  // Adjust canvas size to match container
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (canvas) {
+      canvas.width = canvas.parentElement.clientWidth;
+      canvas.height = canvas.parentElement.clientHeight;
     }
+  }, [toolMode]);
+
+  // Canvas Drawing Handlers
+  const startDrawing = (e) => {
+    if (toolMode !== 'pen') return;
+    const canvas = canvasRef.current;
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    setIsDrawing(true);
+    setPrevPos({ x, y });
+  };
+
+  const draw = (e) => {
+    if (!isDrawing || toolMode !== 'pen') return;
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    ctx.strokeStyle = '#ef4444'; // Red pen color
+    ctx.lineWidth = 3;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    ctx.beginPath();
+    ctx.moveTo(prevPos.x, prevPos.y);
+    ctx.lineTo(x, y);
+    ctx.stroke();
+
+    setPrevPos({ x, y });
+    setHasDrawings(true);
+  };
+
+  const stopDrawing = () => {
+    setIsDrawing(false);
+  };
+
+  // Exact Text Selection Handler for Highlight Mode & Read Mode
+  const handleTextMouseUp = () => {
+    const selection = window.getSelection();
+    const text = selection.toString().trim();
+
+    if (text && text.length > 2) {
+      setSelectedText(text);
+
+      if (toolMode === 'highlight') {
+        if (!highlightedSnippets.includes(text)) {
+          setHighlightedSnippets(prev => [...prev, text]);
+        }
+        setQuestionText(`Giải thích đoạn trích highlight: "${text}"`);
+      }
+    }
+  };
+
+  // Clear drawings and highlights
+  const handleClearAnnotations = () => {
+    setHighlightedSnippets([]);
+    setSelectedText('');
+    setQuestionText('');
+    const canvas = canvasRef.current;
+    if (canvas) {
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+    setHasDrawings(false);
   };
 
   // Step 4: Click Gửi (Send)
@@ -71,20 +149,9 @@ const StudentFlow = () => {
         message: `🎉 Chúc mừng bạn đã đạt ${score}/5 câu Quiz! Tín hiệu hiểu bài đã được lưu vào hệ thống VLearn.`
       });
     } else {
-      const newTicket = {
-        id: `TICKET-${Math.floor(100 + Math.random() * 900)}`,
-        studentName: 'Sinh viên ẩn danh (U102)',
-        selectedText: selectedText || MOCK_LESSON.paragraphs[1].text,
-        question: questionText || 'Fail Quiz kiểm tra hiểu bài',
-        conceptLabel: tutorResult?.conceptLabel || 'Phân biệt Dropout',
-        source: `Fail Quiz (${score}/5 câu)`,
-        status: 'Mới',
-        createdAt: 'Bây giờ'
-      };
-      setTickets([newTicket, ...tickets]);
       setNotification({
-        type: 'danger',
-        message: `⚠️ Chưa đạt Quiz (${score}/5 câu). Đã tự động tạo Ticket #${newTicket.id} gửi sang Dashboard Giảng viên!`
+        type: 'warning',
+        message: `💡 Bạn trả lời đúng ${score}/5 câu. AI Tutor đã phân tích & giải thích chi tiết lý do làm sai cho từng câu để bạn ôn tập lại!`
       });
     }
   };
@@ -93,21 +160,59 @@ const StudentFlow = () => {
     setTickets(tickets.map(t => t.id === ticketId ? { ...t, status: newStatus } : t));
   };
 
+  // Render paragraph with exact highlighted snippet spans
+  const renderParagraphText = (text) => {
+    if (highlightedSnippets.length === 0) return text;
+
+    let parts = [text];
+    highlightedSnippets.forEach((snippet) => {
+      let newParts = [];
+      parts.forEach((part) => {
+        if (typeof part === 'string' && part.includes(snippet)) {
+          const splitArr = part.split(snippet);
+          splitArr.forEach((sub, idx) => {
+            newParts.push(sub);
+            if (idx < splitArr.length - 1) {
+              newParts.push(
+                <mark
+                  key={`${snippet}-${idx}`}
+                  style={{
+                    background: '#fef08a',
+                    color: '#854d0e',
+                    padding: '2px 4px',
+                    borderRadius: '4px',
+                    fontWeight: 'bold',
+                    boxShadow: '0 2px 4px rgba(245, 158, 11, 0.2)'
+                  }}
+                >
+                  {snippet}
+                </mark>
+              );
+            }
+          });
+        } else {
+          newParts.push(part);
+        }
+      });
+      parts = newParts;
+    });
+
+    return parts;
+  };
+
   return (
     <div className="vlearn-app-container min-vh-100 bg-light d-flex flex-column">
-      {/* Top Header Bar (Authentic VLearn UI from Screenshot) */}
+      {/* Top Header Bar */}
       <header className="navbar navbar-expand bg-white border-bottom px-3 py-2 shadow-sm sticky-top">
         <div className="d-flex align-items-center gap-3">
           <button className="btn btn-light btn-sm border">‹</button>
 
-          {/* Brand Logo */}
           <div className="d-flex align-items-center gap-2 font-weight-bold text-dark fs-5">
             <span className="text-primary font-weight-bold">V</span>Learn
           </div>
 
           <div className="vr mx-1"></div>
 
-          {/* Doc Title */}
           <div className="d-flex align-items-center gap-2">
             <span className="fs-5 text-secondary">📄</span>
             <div>
@@ -117,29 +222,66 @@ const StudentFlow = () => {
           </div>
         </div>
 
-        {/* Middle Toolbar */}
-        <div className="mx-auto d-none d-md-flex align-items-center gap-2 bg-light p-1 rounded-3 border">
-          <button className="btn btn-white btn-sm shadow-sm font-weight-bold">📍 Đọc</button>
-          <button className="btn btn-light btn-sm text-muted">✏️ Bút</button>
-          <button className="btn btn-light btn-sm text-muted">🖍️ Highlight</button>
+        {/* Middle Interactive Toolbar */}
+        <div className="mx-auto d-none d-md-flex align-items-center gap-1 bg-light p-1 rounded-3 border">
+          <button
+            className={`btn btn-sm px-3 font-weight-bold transition-all ${
+              toolMode === 'read' ? 'bg-white shadow-sm text-dark rounded-3' : 'text-secondary border-0'
+            }`}
+            onClick={() => setToolMode('read')}
+          >
+            📍 Đọc
+          </button>
+          
+          <button
+            className={`btn btn-sm px-3 font-weight-bold transition-all ${
+              toolMode === 'pen' ? 'bg-secondary-subtle border border-secondary text-dark rounded-3 shadow-sm' : 'text-secondary border-0'
+            }`}
+            style={toolMode === 'pen' ? { background: '#e2e8f0', color: '#0f172a' } : {}}
+            onClick={() => setToolMode('pen')}
+          >
+            ✏️ Bút
+          </button>
+
+          <button
+            className={`btn btn-sm px-3 font-weight-bold transition-all ${
+              toolMode === 'highlight' ? 'bg-warning-subtle border border-warning text-warning-emphasis rounded-3 shadow-sm' : 'text-secondary border-0'
+            }`}
+            style={toolMode === 'highlight' ? { background: '#fef08a', color: '#854d0e' } : {}}
+            onClick={() => setToolMode('highlight')}
+          >
+            🖍️ Highlight
+          </button>
+
           <span className="small text-muted border-start ps-2">Trang 5 · 1 note</span>
-          <span className="small text-muted border-start ps-2">- 100% +</span>
+          <span className="small text-muted border-start ps-2 me-2">- 100% +</span>
+
+          {(highlightedSnippets.length > 0 || hasDrawings) && (
+            <button
+              className="btn btn-outline-danger btn-sm border-0 py-0 font-weight-bold"
+              onClick={handleClearAnnotations}
+            >
+              🗑️ Xóa
+            </button>
+          )}
         </div>
 
         {/* View Switcher & User Profile */}
         <div className="d-flex align-items-center gap-3">
-          <div className="btn-group btn-group-sm">
+          <div className="btn-group btn-group-sm text-nowrap">
             <button
-              className={`btn font-weight-bold ${activeTab === 'student' ? 'btn-primary' : 'btn-outline-primary'}`}
+              className={`btn font-weight-bold text-nowrap ${activeTab === 'student' ? 'btn-primary' : 'btn-outline-primary'}`}
+              style={{ whiteSpace: 'nowrap' }}
               onClick={() => setActiveTab('student')}
             >
               📖 Sinh viên (Slide Reader)
             </button>
             <button
-              className={`btn font-weight-bold ${activeTab === 'teacher' ? 'btn-dark' : 'btn-outline-dark'}`}
+              className={`btn font-weight-bold text-nowrap ${activeTab === 'teacher' ? 'btn-dark' : 'btn-outline-dark'}`}
+              style={{ whiteSpace: 'nowrap' }}
               onClick={() => setActiveTab('teacher')}
             >
-              📊 Giảng viên (Dashboard {tickets.filter(t => t.status === 'Mới').length > 0 ? `• ${tickets.filter(t => t.status === 'Mới').length}` : ''})
+              📊 Giảng viên {tickets.filter(t => t.status === 'Mới').length > 0 ? `(${tickets.filter(t => t.status === 'Mới').length})` : ''}
             </button>
           </div>
 
@@ -150,6 +292,18 @@ const StudentFlow = () => {
           </div>
         </div>
       </header>
+
+      {/* Mode Banners */}
+      {toolMode === 'pen' && (
+        <div className="bg-secondary-subtle text-dark py-1 text-center small font-weight-bold border-bottom">
+          ✏️ CHẾ ĐỘ BÚT VẼ TỰ DO: Dùng chuột kéo rê để vẽ/khoanh vùng tự do lên trang slide!
+        </div>
+      )}
+      {toolMode === 'highlight' && (
+        <div className="bg-warning-subtle text-warning-emphasis py-1 text-center small font-weight-bold border-bottom">
+          🖍️ CHẾ ĐỘ HIGHLIGHT CHÍNH XÁC: Bôi đen đúng từ/cụm từ cần tô vàng & hỏi AI Tutor!
+        </div>
+      )}
 
       {/* Global Notifications */}
       {notification && (
@@ -162,7 +316,7 @@ const StudentFlow = () => {
       {/* Main Workspace Body */}
       {activeTab === 'student' ? (
         <div className="d-flex flex-grow-1 overflow-hidden" style={{ minHeight: 'calc(100vh - 60px)' }}>
-          {/* Left Sidebar: Học liệu môn học (From Screenshot) */}
+          {/* Left Sidebar */}
           <aside className="bg-white border-end p-3 d-none d-lg-block" style={{ width: '280px' }}>
             <h6 className="font-weight-bold text-dark mb-1">📖 Học liệu môn học</h6>
             <p className="text-muted small mb-3">Chương, slide và tài liệu đã upload</p>
@@ -192,29 +346,49 @@ const StudentFlow = () => {
           </aside>
 
           {/* Center PDF Slide Canvas */}
-          <main className="flex-grow-1 p-4 bg-light overflow-auto">
-            <div className="card shadow-sm border-0 p-4 mx-auto bg-white rounded-4" style={{ maxWidth: '850px' }}>
-              <div className="d-flex align-items-center justify-content-between pb-3 mb-3 border-bottom">
+          <main className="flex-grow-1 p-4 bg-light overflow-auto position-relative">
+            <div className="card shadow-sm border-0 p-4 mx-auto bg-white rounded-4 position-relative" style={{ maxWidth: '850px' }}>
+              
+              {/* HTML5 Canvas overlay for Freehand Pen Drawing */}
+              <canvas
+                ref={canvasRef}
+                onMouseDown={startDrawing}
+                onMouseMove={draw}
+                onMouseUp={stopDrawing}
+                onMouseLeave={stopDrawing}
+                className="position-absolute top-0 start-0 w-100 h-100"
+                style={{
+                  pointerEvents: toolMode === 'pen' ? 'auto' : 'none',
+                  zIndex: toolMode === 'pen' ? 10 : 1,
+                  cursor: toolMode === 'pen' ? 'crosshair' : 'default'
+                }}
+              />
+
+              <div className="d-flex align-items-center justify-content-between pb-3 mb-3 border-bottom position-relative" style={{ zIndex: 2 }}>
                 <span className="badge bg-secondary font-weight-bold">Trang 5 / 83</span>
                 <span className="small text-muted font-monospace">Mã tài liệu: {MOCK_LESSON.id}</span>
               </div>
 
-              {/* Text Selection Area (Step 2) */}
-              <div className="pdf-slide-canvas p-3" onMouseUp={handleMouseUp}>
+              {/* Text Area */}
+              <div
+                className="pdf-slide-canvas p-3 position-relative"
+                onMouseUp={handleTextMouseUp}
+                style={{ zIndex: 2 }}
+              >
                 <h4 className="font-weight-bold text-dark mb-3">Slide 5: Overfitting & Regularization trong Deep Learning</h4>
 
                 {MOCK_LESSON.paragraphs.map((p) => (
-                  <p key={p.id} className="lead text-dark mb-4 p-2 rounded hover-bg-light position-relative" style={{ lineHeight: '1.8' }}>
+                  <p key={p.id} className="lead text-dark mb-4 p-2 rounded hover-bg-light" style={{ lineHeight: '1.8' }}>
                     <span className="badge bg-light text-secondary border me-2 font-monospace" style={{ fontSize: '0.7rem' }}>[{p.code}]</span>
-                    {p.text}
+                    {renderParagraphText(p.text)}
                   </p>
                 ))}
               </div>
 
               {selectedText && (
-                <div className="alert alert-indigo mt-3 d-flex align-items-center justify-content-between p-2" style={{ background: '#e0e7ff', color: '#3730a3' }}>
+                <div className="alert alert-indigo mt-3 d-flex align-items-center justify-content-between p-2 position-relative" style={{ background: '#e0e7ff', color: '#3730a3', zIndex: 2 }}>
                   <small className="text-truncate" style={{ maxWidth: '80%' }}>
-                    <strong>Đang chọn:</strong> "{selectedText}"
+                    <strong>Đoạn trích chọn:</strong> "{selectedText}"
                   </small>
                   <button className="btn btn-sm btn-primary font-weight-bold" onClick={() => setSelectedText('')}>Xóa chọn</button>
                 </div>
@@ -232,7 +406,7 @@ const StudentFlow = () => {
               </div>
             </div>
 
-            {/* Input Form (Step 3 & 4) */}
+            {/* Input Form */}
             <div className="mb-3">
               <label className="form-label small text-muted font-weight-bold">Nhập câu hỏi của bạn:</label>
               <textarea
@@ -253,7 +427,7 @@ const StudentFlow = () => {
               {loading ? 'AI đang tạo trích dẫn...' : '🚀 Gửi câu hỏi cho AI Tutor'}
             </button>
 
-            {/* Step 5: AI Answer with Citation */}
+            {/* AI Answer with Citation */}
             <TutorResult
               loading={loading}
               result={tutorResult}
@@ -269,7 +443,7 @@ const StudentFlow = () => {
         </div>
       )}
 
-      {/* Step 7: Quiz Modal */}
+      {/* Quiz Modal */}
       {showQuiz && (
         <QuizFlow
           onClose={() => setShowQuiz(false)}

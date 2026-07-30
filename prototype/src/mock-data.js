@@ -54,7 +54,7 @@ Hy vọng giải thích này giúp bạn làm rõ khác biệt giữa lúc Train
   conceptId: 'concept-dropout-01'
 };
 
-// Quiz 5 câu theo yêu cầu CP2
+// Quiz 5 câu kèm giải thích chi tiết khi trả lời sai
 export const MOCK_QUIZ = [
   {
     id: 1,
@@ -65,7 +65,8 @@ export const MOCK_QUIZ = [
       'C. Tăng số lượng tham số của mạng nơ-ron',
       'D. Tự động gắn nhãn dữ liệu đầu vào'
     ],
-    correctAnswer: 'B'
+    correctAnswer: 'B',
+    explanation: 'Dropout ngẫu nhiên tắt neuron ở từng bước train để tránh các neuron bị phụ thuộc quá nhiều vào nhau (co-adaptation), giúp mô hình tổng quát hóa tốt hơn.'
   },
   {
     id: 2,
@@ -76,18 +77,20 @@ export const MOCK_QUIZ = [
       'C. Tất cả neuron đều được BẬT và trọng số được scaling phù hợp',
       'D. Chỉ bật neuron ở layer đầu tiên'
     ],
-    correctAnswer: 'C'
+    correctAnswer: 'C',
+    explanation: 'Lúc Inference (dự đoán), toàn bộ neuron đều được BẬT để đạt độ chính xác cao nhất. Trọng số sẽ được nhân với (1-p) để cân bằng tổng năng lượng.'
   },
   {
     id: 3,
-    question: '3. Nếu tỷ lệ Dropout $p = 0.2$, có bao nhiêu neuron bị tắt ở mỗi bước forward pass lúc Train?',
+    question: '3. Nếu tỷ lệ Dropout p = 0.2, có bao nhiêu neuron bị tắt ở mỗi bước forward pass lúc Train?',
     options: [
       'A. 20% số neuron trong layer đó',
       'B. 80% số neuron trong layer đó',
       'C. 2% số neuron',
       'D. Không có neuron nào bị tắt'
     ],
-    correctAnswer: 'A'
+    correctAnswer: 'A',
+    explanation: 'Tỷ lệ p = 0.2 nghĩa là ở mỗi bước huấn luyện, 20% số neuron ngẫu nhiên sẽ bị ngắt kết nối tạm thời.'
   },
   {
     id: 4,
@@ -98,7 +101,8 @@ export const MOCK_QUIZ = [
       'C. Khi mô hình bị Underfitting',
       'D. Khi tỷ lệ học (learning rate) quá nhỏ'
     ],
-    correctAnswer: 'B'
+    correctAnswer: 'B',
+    explanation: 'Co-adaptation là hiện tượng các neuron phụ thuộc lẫn nhau để sửa lỗi của nhau trong tập train, dẫn đến kém linh hoạt khi gặp dữ liệu mới.'
   },
   {
     id: 5,
@@ -109,7 +113,8 @@ export const MOCK_QUIZ = [
       'C. Cả Train và Inference đều tắt ngẫu nhiên neuron như nhau',
       'D. Không có điểm khác biệt nào'
     ],
-    correctAnswer: 'B'
+    correctAnswer: 'B',
+    explanation: 'Lúc Train ngẫu nhiên tắt neuron để rèn luyện mạng, còn lúc Inference bật toàn bộ neuron để thu được kết quả dự đoán đầy đủ và chính xác nhất.'
   }
 ];
 
@@ -123,15 +128,5 @@ export const INITIAL_TICKETS = [
     source: 'Bấm "Chưa hiểu"',
     status: 'Mới',
     createdAt: '10:14 AM'
-  },
-  {
-    id: 'TICKET-102',
-    studentName: 'Trần Thị B (U205)',
-    selectedText: 'Scaled Dot-Product Attention được tính bằng softmax(QK^T / sqrt(d_k)) * V',
-    question: 'Tại sao lại cần chia cho căn d_k ạ?',
-    conceptLabel: 'Ý nghĩa của sqrt(d_k) trong Softmax',
-    source: 'Fail Quiz (1/5 câu)',
-    status: 'Đang hỗ trợ',
-    createdAt: '09:45 AM'
   }
 ];
