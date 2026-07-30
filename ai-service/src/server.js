@@ -6,6 +6,12 @@ const { sendError, sendOk, sendOptions } = require("./utils/response");
 
 const PORT = Number(process.env.PORT) || 4000;
 
+const routes = {
+  "/ai/ask": handleAskRoute,
+  "/ai/quiz": handleQuizRoute,
+  "/ai/label": handleLabelRoute
+};
+
 async function requestHandler(req, res) {
   const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
 
@@ -17,23 +23,15 @@ async function requestHandler(req, res) {
   if (req.method === "GET" && url.pathname === "/health") {
     sendOk(res, {
       service: "ai-service",
-      message: "LearningRadar AI service is running"
+      message: "LearningRadar AI service is running",
+      status: "ok"
     });
     return;
   }
 
-  if (url.pathname === "/ai/ask") {
-    await handleAskRoute(req, res);
-    return;
-  }
-
-  if (url.pathname === "/ai/quiz") {
-    await handleQuizRoute(req, res);
-    return;
-  }
-
-  if (url.pathname === "/ai/label") {
-    await handleLabelRoute(req, res);
+  const routeHandler = routes[url.pathname];
+  if (routeHandler) {
+    await routeHandler(req, res);
     return;
   }
 
