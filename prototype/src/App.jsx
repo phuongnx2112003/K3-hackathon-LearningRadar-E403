@@ -3,6 +3,7 @@ import Login from './login';
 import StudentFlow from './student-flow';
 import TeacherDashboard from './teacher-dashboard';
 import { INITIAL_TICKETS } from './mock-data';
+import learningRadarLogo from '../assets/learningradar_logo_icon.png';
 
 function App({ onSubmitQuestion }) {
   const [currentUser, setCurrentUser] = useState(() => {
@@ -63,36 +64,31 @@ function App({ onSubmitQuestion }) {
   // Lab Coach portal
   return (
     <div className="min-vh-100 bg-light d-flex flex-column">
-      {/* Teacher Top Header */}
-      <header className="navbar navbar-expand-lg navbar-dark bg-dark px-4 py-2 shadow-sm">
-        <div className="container-fluid px-0">
-          <div className="d-flex align-items-center gap-3">
-            <div
-              className="bg-primary text-white rounded-3 p-2 font-weight-bold d-flex align-items-center justify-content-center"
-              style={{ width: '36px', height: '36px' }}
-            >
-              LR
-            </div>
-            <div>
-              <h6 className="font-weight-bold text-white mb-0">LearningRadar — Cổng Lab Coach</h6>
-              <small className="text-white-50" style={{ fontSize: '0.7rem' }}>K3 Hackathon E403</small>
-            </div>
+      <header className="coach-topbar">
+        <div className="coach-brand">
+          <div className="coach-logo">
+            <img src={learningRadarLogo} alt="LearningRadar" />
+          </div>
+          <div>
+            <h1>LearningRadar — Cổng Lab Coach</h1>
+            <p>K3 Hackathon E403</p>
+          </div>
+        </div>
+
+        <div className="coach-topbar-actions">
+          <div className="coach-role-pill">
+            <span>{currentUser.avatar || '👨‍🏫'}</span>
+            <strong>{currentUser.name || 'Lab Coach'}</strong>
           </div>
 
-          <div className="d-flex align-items-center gap-3">
-            <div className="d-flex align-items-center gap-2 bg-secondary bg-opacity-25 border border-secondary px-3 py-1 rounded-pill text-white small">
-              <span>{currentUser.avatar || '👨‍🏫'}</span>
-              <strong>{currentUser.name || 'Lab Coach'}</strong>
-            </div>
-
-            <button
-              className="btn btn-outline-light btn-sm font-weight-bold d-flex align-items-center gap-1"
-              onClick={handleLogout}
-              title="Đăng xuất khỏi hệ thống"
-            >
-              🚪 Đăng xuất
-            </button>
-          </div>
+          <button
+            className="coach-logout-button"
+            onClick={handleLogout}
+            title="Đăng xuất khỏi hệ thống"
+          >
+            <span aria-hidden="true">↪</span>
+            Đăng xuất
+          </button>
         </div>
       </header>
 
