@@ -1,6 +1,21 @@
 const DEFAULT_BASE_URL = "https://api.openai.com/v1";
 const DEFAULT_MODEL = "gpt-4o-mini";
+const DEFAULT_LLM_TIMEOUT_MS = 30000;
+const DEFAULT_MAX_OUTPUT_TOKENS = 180;
 const { mockAiAnswer, mockQuiz } = require("../data/mock-ai-responses");
+
+async function fetchWithTimeout(url, options, timeoutMs = Number(process.env.LLM_TIMEOUT_MS) || DEFAULT_LLM_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } catch (error) {
+    if (error.name === "AbortError") throw new Error(`LLM request timed out after ${timeoutMs}ms`);
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 function shouldUseOpenAi() {
   if (process.env.AI_MODE === "mock") {
@@ -43,6 +58,8 @@ function getMockStructuredResponse(schemaName) {
 
   return {
     answer: mockAiAnswer.answer,
+    conceptId: mockAiAnswer.conceptId,
+    conceptLabel: mockAiAnswer.conceptLabel,
     confidence: mockAiAnswer.confidence
   };
 }
@@ -60,6 +77,11 @@ function getOpenAiConfig() {
 }
 
 function extractOutputText(response) {
+  const chatText = response.choices?.[0]?.message?.content;
+  if (typeof chatText === "string" && chatText.trim()) {
+    return chatText;
+  }
+
   if (typeof response.output_text === "string" && response.output_text.trim()) {
     return response.output_text;
   }
@@ -94,20 +116,33 @@ async function generateStructuredResponse(prompt, schemaName) {
   }
 
   const { apiKey, baseUrl, model } = getOpenAiConfig();
-  const response = await fetch(`${baseUrl}/responses`, {
+  // Ollama Cloud's OpenAI-compatible chat endpoint is substantially more
+  // reliable for structured, context-heavy prompts than its Responses endpoint.
+  const useChatCompletions = String(process.env.OPENAI_API_STYLE || "").toLowerCase() === "chat"
+    || /ollama/i.test(baseUrl);
+  const endpoint = useChatCompletions ? `${baseUrl}/chat/completions` : `${baseUrl}/responses`;
+  const body = useChatCompletions
+    ? {
+        model,
+        messages: [{ role: "user", content: prompt }],
+        stream: false,
+        max_tokens: Number(process.env.MAX_LLM_OUTPUT_TOKENS) || DEFAULT_MAX_OUTPUT_TOKENS,
+        response_format: { type: "json_object" }
+      }
+    : {
+        model,
+        input: prompt,
+        store: false,
+        max_output_tokens: Number(process.env.MAX_LLM_OUTPUT_TOKENS) || DEFAULT_MAX_OUTPUT_TOKENS,
+        text: { format: { type: "json_object" } }
+      };
+  const response = await fetchWithTimeout(endpoint, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json"
     },
-    body: JSON.stringify({
-      model,
-      input: prompt,
-      store: false,
-      text: {
-        format: { type: "json_object" }
-      }
-    })
+    body: JSON.stringify(body)
   });
 
   const responseBody = await response.json().catch(() => ({}));
@@ -137,7 +172,7 @@ async function generateVisionStructuredResponse(prompt, imageDataUrl, schemaName
   }
 
   const { apiKey, baseUrl, model } = getOpenAiConfig();
-  const response = await fetch(`${baseUrl}/responses`, {
+  const response = await fetchWithTimeout(`${baseUrl}/responses`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -155,6 +190,7 @@ async function generateVisionStructuredResponse(prompt, imageDataUrl, schemaName
         }
       ],
       store: false,
+      max_output_tokens: Number(process.env.MAX_LLM_OUTPUT_TOKENS) || DEFAULT_MAX_OUTPUT_TOKENS,
       text: {
         format: { type: "json_object" }
       }
@@ -177,12 +213,19 @@ async function generateVisionStructuredResponse(prompt, imageDataUrl, schemaName
 async function generateTutorAnswer(prompt) {
   const result = await generateStructuredResponse(prompt, "Tutor");
 
-  if (typeof result.answer !== "string" || !Number.isFinite(result.confidence)) {
-    throw new Error("Tutor response must contain answer (string) and confidence (number)");
+  if (
+    typeof result.answer !== "string" ||
+    typeof result.conceptId !== "string" ||
+    typeof result.conceptLabel !== "string" ||
+    !Number.isFinite(result.confidence)
+  ) {
+    throw new Error("Tutor response must contain answer, conceptId, conceptLabel, and confidence");
   }
 
   return {
     answer: result.answer,
+    conceptId: result.conceptId,
+    conceptLabel: result.conceptLabel,
     confidence: Math.max(0, Math.min(1, result.confidence))
   };
 }

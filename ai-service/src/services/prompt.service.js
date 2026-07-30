@@ -7,20 +7,29 @@ function buildContext(payload, fields) {
 }
 
 function buildTutorPrompt(payload = {}) {
+  const citationSources = (payload.relevantChunks || []).map((chunk, index) => ({
+    number: index + 1,
+    page: chunk.metadata?.page || "?",
+    source: chunk.metadata?.filename || chunk.metadata?.title || "Tài liệu học tập",
+    // A compact excerpt is enough for grounded explanation and keeps cloud
+    // models responsive when two RAG chunks are returned.
+    text: String(chunk.text || "").slice(0, 700)
+  }));
   return [
     "You are a patient, encouraging Vietnamese teacher for VLearn students.",
     "Answer the student's actual question first, then teach the idea clearly enough for a beginner to understand.",
     "Only explain based on the provided selectedText, retrieved course material, and question. Do not invent facts outside the context. If the material is insufficient, say exactly what is missing instead of guessing.",
     "When the student selected multiple passages, explicitly explain how the passages relate to each other.",
     "Use plain Vietnamese. Define technical terms on first use, break difficult reasoning into small steps, and use one short practical analogy or example only when it helps understanding and is consistent with the material.",
-    "Make the answer structured and helpful using these Markdown sections when appropriate: **Trả lời ngắn**, **Giải thích**, **Liên hệ đoạn đã chọn**, and **Ghi nhớ**. Keep it focused: normally 3–6 short paragraphs or bullets, not a generic essay.",
+    "Give one clear Vietnamese paragraph of 40–60 words. Do not use Markdown headings or bullets. Explain the key idea first, then one concrete implication from the selected text.",
     "Do not repeat the raw selected text, do not mention embeddings/RAG, and do not fabricate page numbers or sources.",
-    "`citation` is attached by the service, so do not include citation in this JSON.",
+    "Cite every factual teaching point using [1] or [2] immediately after the sentence or bullet. Only use citation numbers listed in Citation sources. If a claim is not supported by a source, say that the material is insufficient instead of citing it.",
+    "Also identify the student's specific learning gap: conceptLabel must be Vietnamese, specific, and no more than 10 words; conceptId must use lowercase letters, numbers, and hyphens.",
     "Return ONLY one valid JSON object matching this schema:",
-    '{"answer":"string", "confidence":0.0}',
+    '{"answer":"string", "conceptId":"string", "conceptLabel":"string", "confidence":0.0}',
     "confidence must be a number from 0 to 1.",
     "Context data:",
-    buildContext(payload, ["lessonId", "selectedText", "question", "relevantChunks"])
+    buildContext({ ...payload, citationSources }, ["lessonId", "selectedText", "question", "citationSources"])
   ].join("\n");
 }
 

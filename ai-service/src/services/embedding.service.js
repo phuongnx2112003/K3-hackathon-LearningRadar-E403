@@ -2,6 +2,20 @@ const crypto = require("crypto");
 
 const DEFAULT_EMBEDDING_MODEL = "text-embedding-3-small";
 const DEFAULT_GEMINI_EMBEDDING_MODEL = "gemini-embedding-001";
+const DEFAULT_EMBEDDING_TIMEOUT_MS = 12000;
+
+async function fetchWithTimeout(url, options, timeoutMs = Number(process.env.EMBEDDING_TIMEOUT_MS) || DEFAULT_EMBEDDING_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } catch (error) {
+    if (error.name === "AbortError") throw new Error(`Embedding request timed out after ${timeoutMs}ms`);
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 function getEmbeddingProvider() {
   const configured = String(process.env.EMBEDDING_PROVIDER || "").toLowerCase();
@@ -26,7 +40,7 @@ async function embedWithGemini(texts, taskType) {
   const baseUrl = (process.env.GEMINI_BASE_URL || "https://generativelanguage.googleapis.com/v1beta").replace(/\/+$/, "");
   const embeddings = [];
   for (const text of texts) {
-    const response = await fetch(`${baseUrl}/models/${encodeURIComponent(model)}:embedContent?key=${encodeURIComponent(process.env.GEMINI_API_KEY)}`, {
+    const response = await fetchWithTimeout(`${baseUrl}/models/${encodeURIComponent(model)}:embedContent?key=${encodeURIComponent(process.env.GEMINI_API_KEY)}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ model: `models/${model}`, content: { parts: [{ text }] }, taskType })
@@ -47,7 +61,7 @@ async function embedTexts(texts, taskType = "RETRIEVAL_DOCUMENT") {
     return embedWithGemini(texts, taskType);
   }
   const baseUrl = (process.env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\/+$/, "");
-  const response = await fetch(`${baseUrl}/embeddings`, {
+  const response = await fetchWithTimeout(`${baseUrl}/embeddings`, {
     method: "POST",
     headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}`, "Content-Type": "application/json" },
     body: JSON.stringify({ model: process.env.OPENAI_EMBEDDING_MODEL || DEFAULT_EMBEDDING_MODEL, input: texts, encoding_format: "float" })

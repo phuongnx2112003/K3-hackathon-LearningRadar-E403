@@ -1,5 +1,4 @@
 const { findCitation } = require("../services/citation.service");
-const { labelConcept } = require("../services/concept-label.service");
 const { generateTutorAnswer } = require("../services/llm.service");
 const { buildTutorPrompt } = require("../services/prompt.service");
 const { decideGuardrail } = require("../services/guardrail.service");
@@ -21,6 +20,19 @@ function toCitation(chunk) {
   };
 }
 
+function ensureCitationMarkers(answer, citations) {
+  const text = String(answer || "").trim();
+  if (!text || !citations.length || /\[\d+\]/.test(text)) return text;
+
+  let citationIndex = 0;
+  return text.split(/(\n\s*\n)/).map((part) => {
+    if (!part.trim() || /^\n/.test(part)) return part;
+    const marker = `[${(citationIndex % citations.length) + 1}]`;
+    citationIndex += 1;
+    return `${part.trimEnd()} ${marker}`;
+  }).join("");
+}
+
 async function handleAskRoute(req, res) {
   if (req.method !== "POST") {
     sendError(res, 405, "METHOD_NOT_ALLOWED", "Only POST is allowed");
@@ -40,9 +52,11 @@ async function handleAskRoute(req, res) {
     const relevantChunks = await retrieveContext(payload.question, payload.lessonId, payload.selectedText, payload.selectedPages || []);
     const guardrail = decideGuardrail(payload);
     if (guardrail.handled && relevantChunks.length === 0) {
+      const citation = findCitation({ ...payload, selectedText: payload.selectedText || "No student-selected text" });
       sendOk(res, {
-        answer: guardrail.answer,
-        citation: findCitation({ ...payload, selectedText: payload.selectedText || "No student-selected text" }),
+        answer: ensureCitationMarkers(guardrail.answer, citation ? [citation] : []),
+        citation,
+        citations: citation ? [citation] : [],
         conceptId: guardrail.conceptId,
         conceptLabel: guardrail.conceptLabel,
         confidence: guardrail.confidence,
@@ -53,15 +67,13 @@ async function handleAskRoute(req, res) {
 
     const prompt = buildTutorPrompt({ ...payload, relevantChunks });
     const tutorAnswer = await generateTutorAnswer(prompt);
-    const label = await labelConcept(payload);
-
     const citations = relevantChunks.slice(0, 2).map(toCitation);
     sendOk(res, {
-      answer: tutorAnswer.answer,
+      answer: ensureCitationMarkers(tutorAnswer.answer, citations),
       citation: citations[0] || findCitation(payload),
       citations,
-      conceptId: label.conceptId,
-      conceptLabel: label.conceptLabel,
+      conceptId: tutorAnswer.conceptId,
+      conceptLabel: tutorAnswer.conceptLabel,
       confidence: tutorAnswer.confidence
     });
   } catch (error) {

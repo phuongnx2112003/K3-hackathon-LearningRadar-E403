@@ -1,6 +1,27 @@
 import React from 'react';
 
-const TutorResult = ({ result, onUnderstand, onNotUnderstand, loading }) => {
+function renderAnswerWithCitations(answer, citations, onCitationClick) {
+  return String(answer || '').split(/(\[\d+\])/g).map((part, index) => {
+    const match = part.match(/^\[(\d+)\]$/);
+    if (!match) return part;
+    const citationIndex = Number(match[1]) - 1;
+    const citation = citations[citationIndex];
+    if (!citation) return part;
+    return (
+      <button
+        type="button"
+        key={`${part}-${index}`}
+        className="btn btn-link btn-sm p-0 align-baseline citation-marker"
+        onClick={() => onCitationClick?.(citation, citationIndex)}
+        title={`Mở ${citation.source || 'tài liệu'} · trang ${citation.page || '?'}`}
+      >
+        {part}
+      </button>
+    );
+  });
+}
+
+const TutorResult = ({ result, onUnderstand, onNotUnderstand, onCitationClick, loading }) => {
   if (loading) {
     return (
       <div className="card border-0 shadow-sm p-4 text-center mt-3 bg-white">
@@ -24,17 +45,23 @@ const TutorResult = ({ result, onUnderstand, onNotUnderstand, loading }) => {
 
       {/* Answer Content */}
       <div className="p-3 rounded bg-light border mb-3 text-dark" style={{ whiteSpace: 'pre-line', fontSize: '0.925rem', lineHeight: '1.6' }}>
-        {result.answer}
+        {renderAnswerWithCitations(result.answer, result.citations?.length ? result.citations : [result.citation].filter(Boolean), onCitationClick)}
       </div>
 
       {/* Citation Box */}
       <div className="p-2 mb-3 bg-warning-subtle text-warning-emphasis border border-warning rounded small">
         📌 <strong>Đoạn liên quan</strong>{result.citations?.length ? ` · ${result.citations.length} đoạn` : ''}
         {(result.citations?.length ? result.citations : [result.citation]).filter(Boolean).map((citation, index) => (
-          <div className={index ? 'mt-2 pt-2 border-top border-warning' : 'mt-2'} key={`${citation.source || 'citation'}-${index}`}>
-            <strong>Trang {citation.page || '?'}</strong>
+          <button
+            type="button"
+            className={`citation-card-button text-start w-100 border-0 bg-transparent p-0 ${index ? 'mt-2 pt-2 border-top border-warning' : 'mt-2'}`}
+            key={`${citation.source || 'citation'}-${index}`}
+            onClick={() => onCitationClick?.(citation, index)}
+            title="Mở đúng trang tài liệu"
+          >
+            <strong>[{index + 1}] · Trang {citation.page || '?'}</strong>
             <div style={{ whiteSpace: 'pre-line' }}>“{citation.quote || citation}”</div>
-          </div>
+          </button>
         ))}
       </div>
 

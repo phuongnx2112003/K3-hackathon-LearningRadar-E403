@@ -183,6 +183,7 @@ const StudentFlow = ({ user, onLogout, onSubmitQuestion, tickets: externalTicket
   const [pdfPageCount, setPdfPageCount] = useState(0);
   const [pdfLoading, setPdfLoading] = useState(false);
   const [pdfError, setPdfError] = useState('');
+  const [pendingCitation, setPendingCitation] = useState(null);
   const [pdfRenderTick, setPdfRenderTick] = useState(0);
   const [selectionSource, setSelectionSource] = useState('');
   const [selectedSnippets, setSelectedSnippets] = useState([]);
@@ -221,6 +222,40 @@ const StudentFlow = ({ user, onLogout, onSubmitQuestion, tickets: externalTicket
   const handlePdfPageRendered = useCallback(() => {
     setPdfRenderTick((current) => current + 1);
   }, []);
+
+  const handleCitationClick = useCallback((citation) => {
+    const source = String(citation?.source || '').trim();
+    const page = Math.max(1, Number(citation?.page) || 1);
+    const sourceKey = source.toLowerCase();
+    const targetLesson = dataLessons.find((lesson) => (
+      [lesson.source, lesson.slideFile, lesson.title]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase() === sourceKey)
+    ));
+
+    if (targetLesson?.lessonId) setActiveLessonId(targetLesson.lessonId);
+    setPendingCitation({ page, lessonId: targetLesson?.lessonId || activeLessonId });
+    setNotification({ type: 'info', message: `Đang mở nguồn trích dẫn ở trang ${page}.` });
+  }, [activeLessonId, dataLessons]);
+
+  useEffect(() => {
+    if (!pendingCitation || pendingCitation.lessonId !== activeLessonId || !pdfPagesContainerRef.current) return undefined;
+
+    const timer = window.setTimeout(() => {
+      const target = pdfPagesContainerRef.current?.querySelector(
+        `[data-pdf-page="${pendingCitation.page}"]`
+      );
+      if (target) {
+        target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        setNotification({ type: 'success', message: `Đã mở trang ${pendingCitation.page} từ citation.` });
+      } else {
+        setNotification({ type: 'warning', message: `Không tìm thấy trang ${pendingCitation.page} trong PDF đang mở.` });
+      }
+      setPendingCitation(null);
+    }, pdfDocument ? 180 : 500);
+
+    return () => window.clearTimeout(timer);
+  }, [activeLessonId, pdfDocument, pendingCitation]);
 
   useEffect(() => {
     let active = true;
@@ -1231,6 +1266,7 @@ const StudentFlow = ({ user, onLogout, onSubmitQuestion, tickets: externalTicket
               result={tutorResult}
               onUnderstand={handleUnderstand}
               onNotUnderstand={handleNotUnderstand}
+              onCitationClick={handleCitationClick}
             />
 
             {teacherFeedbackTickets.length > 0 && (
