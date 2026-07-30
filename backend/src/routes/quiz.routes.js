@@ -19,7 +19,9 @@ async function handleQuizRoutes(req, res, url) {
 
     sendError(res, 405, "METHOD_NOT_ALLOWED", "Unsupported quiz route");
   } catch (error) {
-    sendError(res, 500, "QUIZ_ROUTE_FAILED", error.message);
+    const code = error.code || "QUIZ_ROUTE_FAILED";
+    const statusCode = code === "VALIDATION_ERROR" ? 400 : 500;
+    sendError(res, statusCode, code, error.message);
   }
 }
 

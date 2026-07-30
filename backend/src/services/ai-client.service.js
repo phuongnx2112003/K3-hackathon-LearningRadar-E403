@@ -1,6 +1,36 @@
-const { getQuizByConcept } = require("../data/mock-quiz");
+const mockQuizModule = require("../data/mock-quiz");
 
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || "http://localhost:4000";
+
+function getFallbackQuiz(conceptId = "concept-dropout-01") {
+  if (typeof mockQuizModule.getQuizByConcept === "function") {
+    return mockQuizModule.getQuizByConcept(conceptId);
+  }
+
+  const sourceQuestions = mockQuizModule.mockQuizzes?.["lesson-01"] || [];
+
+  if (!sourceQuestions.length) {
+    return {
+      conceptId,
+      conceptLabel: "Phan biet Dropout luc train va inference",
+      questions: []
+    };
+  }
+
+  return {
+    conceptId,
+    conceptLabel: "Phan biet Dropout luc train va inference",
+    questions: sourceQuestions.slice(0, 5).map((question, index) => ({
+      id: String(question.id).startsWith("q") ? String(question.id) : `q${index + 1}`,
+      question: question.question,
+      options: question.options,
+      correctIndex:
+        typeof question.correctIndex === "number"
+          ? question.correctIndex
+          : Math.max(0, String(question.correctAnswer || "A").charCodeAt(0) - "A".charCodeAt(0))
+    }))
+  };
+}
 
 async function postToAiService(path, payload) {
   if (typeof fetch !== "function") {
@@ -55,7 +85,7 @@ async function generateQuiz(payload) {
   try {
     return await postToAiService("/ai/quiz", payload);
   } catch (error) {
-    const quiz = getQuizByConcept(payload.conceptId);
+    const quiz = getFallbackQuiz(payload.conceptId);
     return {
       conceptId: quiz.conceptId,
       conceptLabel: quiz.conceptLabel,
