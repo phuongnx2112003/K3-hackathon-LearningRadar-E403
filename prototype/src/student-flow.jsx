@@ -1,11 +1,17 @@
 import React, { useState, useRef, useEffect } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
-import { MOCK_LESSON, INITIAL_TICKETS } from './mock-data';
+import { MOCK_LESSON, INITIAL_TICKETS, MOCK_AI_RESPONSE } from './mock-data';
 import TutorResult from './tutor-result';
 import QuizFlow from './quiz-flow';
 import TeacherDashboard from './teacher-dashboard';
-import { askTutor, createTicket as createTicketApi, getBackendAssetUrl, getLessons } from './api-client';
+import {
+  askTutor,
+  createTicket as createTicketApi,
+  getBackendAssetUrl,
+  getDashboardTickets,
+  getLessons
+} from './api-client';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
@@ -110,6 +116,7 @@ const StudentFlow = ({ onSubmitQuestion }) => {
   const [pdfPageCount, setPdfPageCount] = useState(0);
   const [pdfLoading, setPdfLoading] = useState(false);
   const [pdfError, setPdfError] = useState('');
+  const [selectionSource, setSelectionSource] = useState('');
 
   const activeDataLesson = dataLessons.find((lesson) => lesson.lessonId === activeLessonId) || dataLessons[0];
   const lessonView = activeDataLesson
@@ -136,6 +143,9 @@ const StudentFlow = ({ onSubmitQuestion }) => {
         paragraphs: activeDataLesson.paragraphs?.length ? activeDataLesson.paragraphs : MOCK_LESSON.paragraphs
       }
     : MOCK_LESSON;
+
+  const totalSlidePages = pdfPageCount || lessonView.totalPages || 1;
+  const safePageIndex = 0;
 
   useEffect(() => {
     let active = true;
@@ -167,6 +177,29 @@ const StudentFlow = ({ onSubmitQuestion }) => {
     };
   }, []);
 
+  useEffect(() => {
+    let active = true;
+
+    async function syncTickets() {
+      try {
+        const data = await getDashboardTickets();
+        if (active && Array.isArray(data.tickets)) {
+          setTickets(data.tickets);
+        }
+      } catch (error) {
+        // Keep local tickets when backend is offline.
+      }
+    }
+
+    syncTickets();
+    const timer = setInterval(syncTickets, 5000);
+
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
+  }, []);
+
   const createTicket = async ({ reason, quizScore = null }) => {
     const payload = {
       studentId: 'student-demo-01',
@@ -193,6 +226,9 @@ const StudentFlow = ({ onSubmitQuestion }) => {
         ...payload,
         source: reason === 'not_understood' ? 'Bấm "Chưa hiểu"' : `Fail Quiz (${quizScore}/5 câu)`,
         status: 'open',
+        teacherReplies: [],
+        teacherFeedback: '',
+        lastFeedbackAt: null,
         createdAt: new Date().toISOString()
       };
 
@@ -210,6 +246,8 @@ const StudentFlow = ({ onSubmitQuestion }) => {
 
   // Canvas Freehand Drawing State
   const canvasRef = useRef(null);
+  const drawingStartRef = useRef(null);
+  const drawingBoundsRef = useRef(null);
   const pdfPagesContainerRef = useRef(null);
   const penBoundsRef = useRef(null);
   const penPointsRef = useRef([]);
@@ -267,27 +305,37 @@ const StudentFlow = ({ onSubmitQuestion }) => {
 
   // Canvas Drawing Handlers
   const startDrawing = (e) => {
-    if (toolMode !== 'pen') return;
+    if (toolMode !== 'pen' && toolMode !== 'highlight') return;
     const canvas = canvasRef.current;
     const rect = canvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
     setIsDrawing(true);
+    drawingStartRef.current = { x, y };
+    drawingBoundsRef.current = { minX: x, minY: y, maxX: x, maxY: y };
     setPrevPos({ x, y });
     penBoundsRef.current = { minX: x, minY: y, maxX: x, maxY: y };
     penPointsRef.current = [{ x, y }];
   };
 
   const draw = (e) => {
-    if (!isDrawing || toolMode !== 'pen') return;
+    if (!isDrawing || (toolMode !== 'pen' && toolMode !== 'highlight')) return;
+    if (toolMode === 'highlight') return;
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
     const rect = canvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
+    const bounds = drawingBoundsRef.current;
+    if (bounds) {
+      bounds.minX = Math.min(bounds.minX, x);
+      bounds.minY = Math.min(bounds.minY, y);
+      bounds.maxX = Math.max(bounds.maxX, x);
+      bounds.maxY = Math.max(bounds.maxY, y);
+    }
 
-    ctx.strokeStyle = '#ef4444'; // Red pen color
-    ctx.lineWidth = 3;
+    ctx.strokeStyle = '#ef4444';
+    ctx.lineWidth = 4;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
 
@@ -344,27 +392,48 @@ const StudentFlow = ({ onSubmitQuestion }) => {
     penPointsRef.current = [];
   };
 
+  const applySelectedText = (text, options = {}) => {
+    const cleanText = String(text || '').trim();
+    if (cleanText.length < 2) return;
+
+    setSelectedText(cleanText);
+    setSelectionSource(options.source || 'Đã lấy đoạn text từ slide.');
+
+    if (options.highlight) {
+      setHighlightedSnippets((current) => (
+        current.includes(cleanText) ? current : [...current, cleanText]
+      ));
+      setQuestionText(`Giải thích đoạn trích highlight: "${cleanText}"`);
+      return;
+    }
+
+    if (!questionText.trim()) {
+      setQuestionText('Giải thích đoạn kiến thức này giúp em.');
+    }
+  };
+
   // Exact Text Selection Handler for Highlight Mode & Read Mode
   const handleTextMouseUp = () => {
     const selection = window.getSelection();
     const text = selection.toString().trim();
 
     if (text && text.length > 2) {
-      setSelectedText(text);
-
-      if (toolMode === 'highlight') {
-        if (!highlightedSnippets.includes(text)) {
-          setHighlightedSnippets(prev => [...prev, text]);
-        }
-        setQuestionText(`Giải thích đoạn trích highlight: "${text}"`);
-      }
+      applySelectedText(text, {
+        highlight: toolMode === 'highlight',
+        source: toolMode === 'highlight'
+          ? 'Đã highlight đoạn text trong transcript.'
+          : 'Đã bôi đen đoạn text trong transcript.'
+      });
+      return;
     }
   };
 
   // Clear drawings and highlights
   const handleClearAnnotations = () => {
     setHighlightedSnippets([]);
+    drawingStartRef.current = null;
     setSelectedText('');
+    setSelectionSource('');
     setQuestionText('');
     const canvas = canvasRef.current;
     if (canvas) {
@@ -393,7 +462,12 @@ const StudentFlow = ({ onSubmitQuestion }) => {
         selectedText,
         question: questionText
       });
-      setTutorResult(response);
+      setTutorResult({
+        ...response,
+        lessonId: activeDataLesson?.lessonId || 'lesson-01',
+        selectedText,
+        question: questionText
+      });
     } catch (error) {
       setNotification({
         type: 'danger',
@@ -493,9 +567,19 @@ const StudentFlow = ({ onSubmitQuestion }) => {
     }
   };
 
-  const handleUpdateTicketStatus = (ticketId, newStatus) => {
-    setTickets(tickets.map(t => t.id === ticketId ? { ...t, status: newStatus } : t));
+  const handleUpdateTicketStatus = (ticketId, newStatus, updatedTicket = {}) => {
+    setTickets((currentTickets) => currentTickets.map((ticket) => (
+      ticket.id === ticketId
+        ? { ...ticket, ...updatedTicket, status: updatedTicket.status || newStatus }
+        : ticket
+    )));
   };
+
+  const teacherFeedbackTickets = tickets.filter((ticket) => {
+    const hasFeedback = (ticket.teacherReplies || []).length > 0 || ticket.teacherFeedback;
+    const belongsToCurrentStudent = !ticket.studentId || ticket.studentId === 'student-demo-01';
+    return hasFeedback && belongsToCurrentStudent;
+  });
 
   // Render paragraph with exact highlighted snippet spans
   const renderParagraphText = (text) => {
@@ -590,7 +674,7 @@ const StudentFlow = ({ onSubmitQuestion }) => {
             🖍️ Highlight
           </button>
 
-          <span className="small text-muted border-start ps-2">Trang 5 · 1 note</span>
+          <span className="small text-muted border-start ps-2">Trang {safePageIndex + 1} · {totalSlidePages} slide</span>
           <span className="small text-muted border-start ps-2 me-2">- 100% +</span>
 
           {(highlightedSnippets.length > 0 || hasDrawings) && (
@@ -756,11 +840,20 @@ const StudentFlow = ({ onSubmitQuestion }) => {
               </div>
 
               {selectedText && (
-                <div className="alert alert-indigo mt-3 d-flex align-items-center justify-content-between p-2 position-relative" style={{ background: '#e0e7ff', color: '#3730a3', zIndex: 2 }}>
-                  <small className="text-truncate" style={{ maxWidth: '80%' }}>
+                <div className="alert alert-indigo mt-3 d-flex align-items-center justify-content-between gap-2 p-2 position-relative" style={{ background: '#e0e7ff', color: '#3730a3', zIndex: 2 }}>
+                  <small className="text-truncate" style={{ maxWidth: '76%' }}>
                     <strong>Đoạn trích chọn:</strong> "{selectedText}"
+                    {selectionSource && <span className="d-block text-muted">{selectionSource}</span>}
                   </small>
-                  <button className="btn btn-sm btn-primary font-weight-bold" onClick={() => setSelectedText('')}>Xóa chọn</button>
+                  <button
+                    className="btn btn-sm btn-primary font-weight-bold"
+                    onClick={() => {
+                      setSelectedText('');
+                      setSelectionSource('');
+                    }}
+                  >
+                    Xóa chọn
+                  </button>
                 </div>
               )}
             </div>
@@ -784,7 +877,10 @@ const StudentFlow = ({ onSubmitQuestion }) => {
                 rows="3"
                 placeholder="Bôi đen đoạn slide bên trái hoặc dán đoạn kiến thức vào đây."
                 value={selectedText}
-                onChange={(e) => setSelectedText(e.target.value)}
+                onChange={(e) => {
+                  setSelectedText(e.target.value);
+                  setSelectionSource(e.target.value.trim() ? 'Đã nhập/dán thủ công.' : '');
+                }}
               />
               <label className="form-label small text-muted font-weight-bold">Nhập câu hỏi của bạn:</label>
               <textarea
@@ -812,6 +908,34 @@ const StudentFlow = ({ onSubmitQuestion }) => {
               onUnderstand={handleUnderstand}
               onNotUnderstand={handleNotUnderstand}
             />
+
+            {teacherFeedbackTickets.length > 0 && (
+              <div className="mt-3 border rounded-3 p-3 bg-light">
+                <div className="d-flex align-items-center justify-content-between mb-2">
+                  <strong className="text-dark">Phan hoi tu giang vien</strong>
+                  <span className="badge bg-success">{teacherFeedbackTickets.length} ticket</span>
+                </div>
+                {teacherFeedbackTickets.slice(0, 3).map((ticket) => (
+                  <div key={ticket.id} className="bg-white border rounded-3 p-2 mb-2 small">
+                    <div className="d-flex justify-content-between gap-2">
+                      <strong>{ticket.conceptLabel || ticket.id}</strong>
+                      <span className="text-muted">{ticket.lastFeedbackAt || ticket.createdAt}</span>
+                    </div>
+                    <div className="text-muted mt-1">Ve cau hoi: "{ticket.question}"</div>
+                    {(ticket.teacherReplies || []).map((reply) => (
+                      <div key={reply.id} className="mt-2 p-2 rounded-2" style={{ background: '#ecfdf5', color: '#065f46' }}>
+                        <strong>{reply.teacherName || 'Giang vien/TA'}:</strong> {reply.message}
+                      </div>
+                    ))}
+                    {ticket.teacherFeedback && (!ticket.teacherReplies || ticket.teacherReplies.length === 0) && (
+                      <div className="mt-2 p-2 rounded-2" style={{ background: '#ecfdf5', color: '#065f46' }}>
+                        <strong>Giang vien/TA:</strong> {ticket.teacherFeedback}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </aside>
         </div>
       ) : (
@@ -827,7 +951,11 @@ const StudentFlow = ({ onSubmitQuestion }) => {
           context={{
             lessonId: activeDataLesson?.lessonId || 'lesson-01',
             studentId: 'student-demo-01',
-            conceptId: tutorResult?.conceptId || 'concept-dropout-01'
+            conceptId: tutorResult?.conceptId || 'concept-contextual',
+            conceptLabel: tutorResult?.conceptLabel || 'Kiem tra diem vua thac mac',
+            selectedText: tutorResult?.selectedText || selectedText,
+            question: tutorResult?.question || questionText,
+            answer: tutorResult?.answer || ''
           }}
           onClose={() => setShowQuiz(false)}
           onQuizComplete={handleQuizComplete}

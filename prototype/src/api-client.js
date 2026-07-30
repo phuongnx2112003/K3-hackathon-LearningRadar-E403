@@ -49,6 +49,13 @@ export function recognizeSlideRegion(payload) {
 }
 
 export function getQuiz(conceptId) {
+  if (typeof conceptId === "object" && conceptId !== null) {
+    return request("/api/quiz", {
+      method: "POST",
+      body: JSON.stringify(conceptId)
+    });
+  }
+
   const params = new URLSearchParams({ conceptId });
   return request(`/api/quiz?${params.toString()}`);
 }
@@ -67,10 +74,22 @@ export function createTicket(payload) {
   });
 }
 
-export function updateTicketStatus(id, status) {
+export function updateTicketStatus(id, status, updates = {}) {
   return request("/api/tickets", {
     method: "PATCH",
-    body: JSON.stringify({ id, status })
+    body: JSON.stringify({ id, status, ...updates })
+  });
+}
+
+export function sendTicketFeedback(id, teacherFeedback, status = "reviewed") {
+  return request("/api/tickets", {
+    method: "PATCH",
+    body: JSON.stringify({
+      id,
+      status,
+      teacherFeedback,
+      teacherName: "Giang vien/TA"
+    })
   });
 }
 

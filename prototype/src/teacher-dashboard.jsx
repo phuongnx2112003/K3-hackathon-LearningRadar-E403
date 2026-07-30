@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { getDashboardTickets, updateTicketStatus } from './api-client';
+import { getDashboardTickets, sendTicketFeedback, updateTicketStatus } from './api-client';
 
 const TeacherDashboard = ({ tickets: initialTickets = [], onUpdateTicketStatus }) => {
   const [filterStatus, setFilterStatus] = useState('All');
@@ -7,6 +7,9 @@ const TeacherDashboard = ({ tickets: initialTickets = [], onUpdateTicketStatus }
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(false);
   const [isBackendLive, setIsBackendLive] = useState(false);
+  const [selectedTicketId, setSelectedTicketId] = useState(null);
+  const [feedbackDrafts, setFeedbackDrafts] = useState({});
+  const [actionMessage, setActionMessage] = useState('');
 
   // Load tickets from Backend API
   const loadDashboardData = async () => {
@@ -35,7 +38,10 @@ const TeacherDashboard = ({ tickets: initialTickets = [], onUpdateTicketStatus }
   const handleStatusChange = async (ticketId, newStatus) => {
     try {
       if (isBackendLive) {
-        await updateTicketStatus(ticketId, newStatus);
+        const data = await updateTicketStatus(ticketId, newStatus);
+        if (data?.ticket && onUpdateTicketStatus) {
+          onUpdateTicketStatus(ticketId, data.ticket.status, data.ticket);
+        }
         await loadDashboardData();
       } else {
         setTickets(prev => prev.map(t => t.id === ticketId ? { ...t, status: newStatus } : t));
@@ -44,8 +50,53 @@ const TeacherDashboard = ({ tickets: initialTickets = [], onUpdateTicketStatus }
       console.error('Error updating status:', err.message);
     }
 
-    if (onUpdateTicketStatus) {
+    if (onUpdateTicketStatus && !isBackendLive) {
       onUpdateTicketStatus(ticketId, newStatus);
+    }
+  };
+
+  const applyTicketUpdate = (ticketId, updatedTicket) => {
+    setTickets(prev => prev.map(t => t.id === ticketId ? { ...t, ...updatedTicket } : t));
+    if (onUpdateTicketStatus) {
+      onUpdateTicketStatus(ticketId, updatedTicket.status, updatedTicket);
+    }
+  };
+
+  const handleFeedbackSubmit = async (ticket) => {
+    const message = (feedbackDrafts[ticket.id] || '').trim();
+    if (!message) {
+      setActionMessage('Hay nhap noi dung feedback truoc khi gui.');
+      return;
+    }
+
+    const localReply = {
+      id: `local-reply-${Date.now()}`,
+      teacherName: 'Giang vien/TA',
+      message,
+      createdAt: new Date().toISOString()
+    };
+
+    try {
+      if (isBackendLive) {
+        const data = await sendTicketFeedback(ticket.id, message, 'reviewed');
+        if (data?.ticket) {
+          applyTicketUpdate(ticket.id, data.ticket);
+        }
+        await loadDashboardData();
+      } else {
+        applyTicketUpdate(ticket.id, {
+          ...ticket,
+          status: ticket.status === 'open' ? 'reviewed' : ticket.status,
+          teacherFeedback: message,
+          lastFeedbackAt: localReply.createdAt,
+          teacherReplies: [...(ticket.teacherReplies || []), localReply]
+        });
+      }
+
+      setFeedbackDrafts(prev => ({ ...prev, [ticket.id]: '' }));
+      setActionMessage(`Da gui phan hoi cho sinh vien o ticket ${ticket.id}.`);
+    } catch (err) {
+      setActionMessage(`Khong gui duoc feedback: ${err.message}`);
     }
   };
 
@@ -86,6 +137,7 @@ const TeacherDashboard = ({ tickets: initialTickets = [], onUpdateTicketStatus }
 
   const openCount = summary?.openTickets ?? tickets.filter(t => t.status === 'open' || t.status === 'Mới').length;
   const reviewedCount = summary?.reviewedTickets ?? tickets.filter(t => t.status === 'reviewed' || t.status === 'in_progress' || t.status === 'Đang hỗ trợ').length;
+  const selectedTicket = tickets.find((ticket) => ticket.id === selectedTicketId) || filteredTickets[0] || null;
 
   return (
     <div className="p-4 bg-white rounded-4 shadow-sm border">
@@ -131,6 +183,12 @@ const TeacherDashboard = ({ tickets: initialTickets = [], onUpdateTicketStatus }
           </button>
         ))}
       </div>
+
+      {actionMessage && (
+        <div className="alert alert-info py-2 small" role="status">
+          {actionMessage}
+        </div>
+      )}
 
       {/* Summary Cards */}
       <div className="row g-3 mb-4">
@@ -181,7 +239,12 @@ const TeacherDashboard = ({ tickets: initialTickets = [], onUpdateTicketStatus }
           <tbody>
             {filteredTickets.length > 0 ? (
               filteredTickets.map((t) => (
-                <tr key={t.id}>
+                <tr
+                  key={t.id}
+                  className={selectedTicketId === t.id ? 'table-primary' : ''}
+                  onClick={() => setSelectedTicketId(t.id)}
+                  style={{ cursor: 'pointer' }}
+                >
                   <td><strong className="font-monospace text-primary">{t.id}</strong></td>
                   <td>
                     <strong className="text-dark d-block">{t.studentName || t.studentId || 'Sinh viên ẩn danh'}</strong>
@@ -211,12 +274,23 @@ const TeacherDashboard = ({ tickets: initialTickets = [], onUpdateTicketStatus }
                     <select
                       className="form-select form-select-sm"
                       value={t.status}
+                      onClick={(e) => e.stopPropagation()}
                       onChange={(e) => handleStatusChange(t.id, e.target.value)}
                     >
                       <option value="open">open (Cần xử lý)</option>
                       <option value="reviewed">reviewed (Đang xem)</option>
                       <option value="closed">closed (Đã xong)</option>
                     </select>
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-outline-primary w-100 mt-2"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedTicketId(t.id);
+                      }}
+                    >
+                      Mo / tra loi
+                    </button>
                   </td>
                 </tr>
               ))
@@ -230,6 +304,77 @@ const TeacherDashboard = ({ tickets: initialTickets = [], onUpdateTicketStatus }
           </tbody>
         </table>
       </div>
+
+      {selectedTicket && (
+        <div className="border rounded-3 p-3 mt-3 bg-light">
+          <div className="d-flex align-items-start justify-content-between gap-3 mb-3">
+            <div>
+              <h5 className="mb-1 text-dark">Tra loi sinh vien - {selectedTicket.id}</h5>
+              <div className="small text-muted">
+                {selectedTicket.studentName || selectedTicket.studentId || 'Sinh vien an danh'} · {selectedTicket.createdAt}
+              </div>
+            </div>
+            <div>{getStatusBadge(selectedTicket.status)}</div>
+          </div>
+
+          <div className="row g-3">
+            <div className="col-lg-6">
+              <div className="bg-white border rounded-3 p-3 h-100">
+                <div className="small text-muted fw-bold mb-1">Cau hoi cua sinh vien</div>
+                <p className="mb-2">{selectedTicket.question}</p>
+                <div className="small text-muted fw-bold mb-1">Doan sinh vien chon</div>
+                <div className="small text-dark" style={{ whiteSpace: 'pre-wrap' }}>
+                  {selectedTicket.selectedText}
+                </div>
+              </div>
+            </div>
+
+            <div className="col-lg-6">
+              <div className="bg-white border rounded-3 p-3 h-100">
+                <label className="form-label small text-muted fw-bold">
+                  Feedback gui truc tiep cho sinh vien
+                </label>
+                <textarea
+                  className="form-control"
+                  rows="4"
+                  placeholder="Nhap giai thich ngan gon, goi y xem lai slide/trich dan, hoac hen sinh vien hoi tiep..."
+                  value={feedbackDrafts[selectedTicket.id] || ''}
+                  onChange={(e) => setFeedbackDrafts(prev => ({ ...prev, [selectedTicket.id]: e.target.value }))}
+                />
+                <div className="d-flex gap-2 mt-2">
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm fw-bold"
+                    onClick={() => handleFeedbackSubmit(selectedTicket)}
+                  >
+                    Gui phan hoi cho sinh vien
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-outline-success btn-sm"
+                    onClick={() => handleStatusChange(selectedTicket.id, 'closed')}
+                  >
+                    Danh dau da xu ly
+                  </button>
+                </div>
+
+                {(selectedTicket.teacherReplies || []).length > 0 && (
+                  <div className="mt-3">
+                    <div className="small text-muted fw-bold mb-2">Lich su phan hoi</div>
+                    {(selectedTicket.teacherReplies || []).map((reply) => (
+                      <div key={reply.id} className="border rounded-3 p-2 mb-2 small bg-light">
+                        <strong>{reply.teacherName || 'Giang vien/TA'}</strong>
+                        <span className="text-muted ms-2">{reply.createdAt}</span>
+                        <div className="mt-1">{reply.message}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
