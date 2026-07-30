@@ -4,6 +4,8 @@ const path = require("path");
 const projectRoot = path.resolve(__dirname, "../../..");
 const transcriptDir = path.join(projectRoot, "data", "vlearn-pack", "transcript");
 const slidesDir = path.join(projectRoot, "data", "vlearn-pack", "slides");
+const slidePagesDir = path.join(projectRoot, "data", "vlearn-pack", "slide-pages");
+const slideManifestPath = path.join(slidePagesDir, "manifest.json");
 
 const lessonConfigs = [
   {
@@ -97,9 +99,35 @@ function getSlidePath(slideFile) {
   return fs.existsSync(slidePath) ? slidePath : null;
 }
 
+function getSlidePageImagePath(slug, imageName) {
+  const safeSlug = path.basename(slug || "");
+  const safeImageName = path.basename(imageName || "");
+  const imagePath = path.join(slidePagesDir, safeSlug, safeImageName);
+
+  if (!imagePath.startsWith(slidePagesDir) || !fs.existsSync(imagePath)) {
+    return null;
+  }
+
+  return imagePath;
+}
+
+function getSlideManifest() {
+  if (!fs.existsSync(slideManifestPath)) {
+    return { slides: {} };
+  }
+
+  try {
+    return JSON.parse(fs.readFileSync(slideManifestPath, "utf8"));
+  } catch (error) {
+    return { slides: {} };
+  }
+}
+
 module.exports = {
   findLessonById,
   getLessons,
+  getSlideManifest,
+  getSlidePageImagePath,
   getSlidePath,
   lessonConfigs
 };

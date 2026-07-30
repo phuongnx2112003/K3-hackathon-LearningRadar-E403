@@ -1,4 +1,4 @@
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:3000";
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:3300";
 
 async function request(path, options = {}) {
   const response = await fetch(`${BACKEND_URL}${path}`, {
@@ -33,6 +33,19 @@ export function getBackendAssetUrl(path) {
   if (!path) return "";
   if (/^https?:\/\//i.test(path)) return path;
   return `${BACKEND_URL}${path.startsWith("/") ? path : `/${path}`}`;
+}
+
+export function getSlidePageImageUrl(slideFile, page) {
+  if (!slideFile || !page) return "";
+  const slug = slideFile.replace(/\.pdf$/i, "");
+  return `${BACKEND_URL}/api/slide-pages/${encodeURIComponent(slug)}/page-${String(page).padStart(3, "0")}.png`;
+}
+
+export function recognizeSlideRegion(payload) {
+  return request("/api/slide-region/recognize", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
 }
 
 export function getQuiz(conceptId) {

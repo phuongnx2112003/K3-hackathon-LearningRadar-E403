@@ -26,8 +26,13 @@ async function requestHandler(req, res) {
     return;
   }
 
-  if (url.pathname === "/api/lessons" || url.pathname.startsWith("/api/slides/")) {
-    handleLessonRoutes(req, res, url);
+  if (
+    url.pathname === "/api/lessons" ||
+    url.pathname === "/api/slide-region/recognize" ||
+    url.pathname.startsWith("/api/slides/") ||
+    url.pathname.startsWith("/api/slide-pages/")
+  ) {
+    await handleLessonRoutes(req, res, url);
     return;
   }
 
