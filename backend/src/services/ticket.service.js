@@ -6,6 +6,18 @@ const { mockTickets } = require("../data/mock-tickets");
 const allowedReasons = new Set(["not_understood", "quiz_failed"]);
 const allowedStatuses = new Set(["open", "reviewed", "closed"]);
 
+function buildTeacherReply(payload) {
+  const message = String(payload.teacherFeedback || payload.feedbackMessage || payload.message || "").trim();
+  if (!message) return null;
+
+  return {
+    id: `reply-${Date.now()}`,
+    teacherName: payload.teacherName || "Giang vien/TA",
+    message,
+    createdAt: new Date().toISOString()
+  };
+}
+
 /**
  * POST /api/tickets - Tạo ticket mới
  * Ticket được tạo khi: sinh viên bấm "Chưa hiểu" (reason: not_understood)
@@ -44,6 +56,9 @@ function createTicket(payload) {
     reason: payload.reason,
     quizScore: payload.quizScore ?? null,
     status: "open",
+    teacherReplies: [],
+    teacherFeedback: "",
+    lastFeedbackAt: null,
     createdAt: new Date().toISOString()
   };
 
@@ -66,8 +81,8 @@ function listTickets(filterStatus) {
  * Cập nhật trạng thái ticket (Giảng viên dùng)
  * status: "open" | "reviewed" | "closed"
  */
-function updateTicketStatus(ticketId, newStatus) {
-  if (!allowedStatuses.has(newStatus)) {
+function updateTicketStatus(ticketId, newStatus, updates = {}) {
+  if (newStatus && !allowedStatuses.has(newStatus)) {
     const error = new Error("status phai la 'open', 'reviewed' hoac 'closed'");
     error.code = "VALIDATION_ERROR";
     throw error;
@@ -80,7 +95,21 @@ function updateTicketStatus(ticketId, newStatus) {
     throw error;
   }
 
-  ticket.status = newStatus;
+  if (newStatus) {
+    ticket.status = newStatus;
+  }
+
+  const reply = buildTeacherReply(updates);
+  if (reply) {
+    ticket.teacherReplies = Array.isArray(ticket.teacherReplies) ? ticket.teacherReplies : [];
+    ticket.teacherReplies.push(reply);
+    ticket.teacherFeedback = reply.message;
+    ticket.lastFeedbackAt = reply.createdAt;
+    if (ticket.status === "open") {
+      ticket.status = "reviewed";
+    }
+  }
+
   return ticket;
 }
 
