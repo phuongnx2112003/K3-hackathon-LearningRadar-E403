@@ -1,4 +1,4 @@
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:3000";
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:3300";
 
 async function request(path, options = {}) {
   const response = await fetch(`${BACKEND_URL}${path}`, {
@@ -35,7 +35,27 @@ export function getBackendAssetUrl(path) {
   return `${BACKEND_URL}${path.startsWith("/") ? path : `/${path}`}`;
 }
 
+export function getSlidePageImageUrl(slideFile, page) {
+  if (!slideFile || !page) return "";
+  const slug = slideFile.replace(/\.pdf$/i, "");
+  return `${BACKEND_URL}/api/slide-pages/${encodeURIComponent(slug)}/page-${String(page).padStart(3, "0")}.png`;
+}
+
+export function recognizeSlideRegion(payload) {
+  return request("/api/slide-region/recognize", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
 export function getQuiz(conceptId) {
+  if (typeof conceptId === "object" && conceptId !== null) {
+    return request("/api/quiz", {
+      method: "POST",
+      body: JSON.stringify(conceptId)
+    });
+  }
+
   const params = new URLSearchParams({ conceptId });
   return request(`/api/quiz?${params.toString()}`);
 }
@@ -54,10 +74,22 @@ export function createTicket(payload) {
   });
 }
 
-export function updateTicketStatus(id, status) {
+export function updateTicketStatus(id, status, updates = {}) {
   return request("/api/tickets", {
     method: "PATCH",
-    body: JSON.stringify({ id, status })
+    body: JSON.stringify({ id, status, ...updates })
+  });
+}
+
+export function sendTicketFeedback(id, teacherFeedback, status = "reviewed") {
+  return request("/api/tickets", {
+    method: "PATCH",
+    body: JSON.stringify({
+      id,
+      status,
+      teacherFeedback,
+      teacherName: "Giang vien/TA"
+    })
   });
 }
 

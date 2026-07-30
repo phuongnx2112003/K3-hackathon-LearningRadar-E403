@@ -8,6 +8,13 @@ const QuizFlow = ({ context, onClose, onQuizComplete }) => {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
+  const contextKey = JSON.stringify({
+    lessonId: context.lessonId,
+    conceptId: context.conceptId,
+    selectedText: context.selectedText,
+    question: context.question,
+    answer: context.answer
+  });
 
   useEffect(() => {
     let active = true;
@@ -16,7 +23,7 @@ const QuizFlow = ({ context, onClose, onQuizComplete }) => {
       try {
         setLoading(true);
         setError(null);
-        const data = await getQuiz(context.conceptId);
+        const data = await getQuiz(context);
         if (active) setQuiz(data);
       } catch (requestError) {
         if (active) setError(requestError.message || 'Không thể tải quiz từ backend.');
@@ -29,7 +36,7 @@ const QuizFlow = ({ context, onClose, onQuizComplete }) => {
     return () => {
       active = false;
     };
-  }, [context.conceptId]);
+  }, [contextKey]);
 
   const handleSelect = (questionId, optionIndex) => {
     if (result) return;
