@@ -1,0 +1,14 @@
+{
+  "name": "learningradar-ai-service",
+  "version": "1.0.0",
+  "private": true,
+  "description": "AI service for LearningRadar CP3.",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node src/server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
