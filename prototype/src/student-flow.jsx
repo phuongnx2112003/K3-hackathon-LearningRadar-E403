@@ -1,16 +1,98 @@
 import React, { useState, useRef, useEffect } from 'react';
+import * as pdfjsLib from 'pdfjs-dist';
+import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { MOCK_LESSON, INITIAL_TICKETS } from './mock-data';
 import TutorResult from './tutor-result';
 import QuizFlow from './quiz-flow';
 import TeacherDashboard from './teacher-dashboard';
-import {
-  askTutor,
-  createTicket as createTicketApi,
-  getBackendAssetUrl,
-  getLessons,
-  getSlidePageImageUrl,
-  recognizeSlideRegion
-} from './api-client';
+import { askTutor, createTicket as createTicketApi, getBackendAssetUrl, getLessons } from './api-client';
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
+
+function PdfPage({ documentProxy, pageNumber, onTextMouseUp }) {
+  const canvasRef = useRef(null);
+  const textLayerRef = useRef(null);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    let renderTask;
+
+    async function renderPage() {
+      try {
+        const page = await documentProxy.getPage(pageNumber);
+        if (cancelled || !canvasRef.current || !textLayerRef.current) return;
+
+        // The page section starts at the browser's default 300px canvas width.
+        // Measure the scroll reader instead so every PDF page fills the middle pane.
+        const readerWidth = canvasRef.current.parentElement.parentElement?.clientWidth || 760;
+        const parentWidth = Math.max(readerWidth - 24, 320);
+        const unscaledViewport = page.getViewport({ scale: 1 });
+        const scale = Math.min(parentWidth / unscaledViewport.width, 2.5);
+        const viewport = page.getViewport({ scale });
+        const canvas = canvasRef.current;
+        const context = canvas.getContext('2d');
+
+        canvas.width = Math.ceil(viewport.width);
+        canvas.height = Math.ceil(viewport.height);
+        canvas.style.width = `${Math.ceil(viewport.width)}px`;
+        canvas.style.height = `${Math.ceil(viewport.height)}px`;
+
+        renderTask = page.render({ canvasContext: context, viewport });
+        await renderTask.promise;
+        if (cancelled || !textLayerRef.current) return;
+
+        const textContent = await page.getTextContent();
+        const textLayer = textLayerRef.current;
+        textLayer.replaceChildren();
+        textLayer.style.width = `${Math.ceil(viewport.width)}px`;
+        textLayer.style.height = `${Math.ceil(viewport.height)}px`;
+
+        textContent.items.forEach((item, index) => {
+          if (!item.str) return;
+          const transform = pdfjsLib.Util.transform(viewport.transform, item.transform);
+          const fontHeight = Math.hypot(transform[2], transform[3]);
+          const span = document.createElement('span');
+          span.dataset.pdfText = 'true';
+          span.dataset.pdfPage = String(pageNumber);
+          span.dataset.pdfIndex = String(index);
+          span.textContent = item.str;
+          span.style.left = `${transform[4]}px`;
+          span.style.top = `${transform[5] - fontHeight}px`;
+          span.style.width = `${Math.max(item.width * scale, 1)}px`;
+          span.style.height = `${Math.max(fontHeight, 1)}px`;
+          span.style.fontSize = `${fontHeight}px`;
+          textLayer.appendChild(span);
+        });
+      } catch (renderError) {
+        if (!cancelled) setError(`Không thể hiển thị trang ${pageNumber}: ${renderError.message}`);
+      }
+    }
+
+    renderPage();
+    return () => {
+      cancelled = true;
+      renderTask?.cancel();
+    };
+  }, [documentProxy, pageNumber]);
+
+  return (
+    <section className="position-relative mx-auto mb-3" style={{ width: 'fit-content', minHeight: '120px' }}>
+      <canvas ref={canvasRef} className="d-block shadow-sm" />
+      <div
+        ref={textLayerRef}
+        onMouseUp={(event) => {
+          event.stopPropagation();
+          onTextMouseUp();
+        }}
+        aria-label={`Lớp văn bản có thể bôi đen của PDF, trang ${pageNumber}`}
+        className="pdf-text-layer"
+        style={{ position: 'absolute', inset: 0, userSelect: 'text', cursor: 'text' }}
+      />
+      {error && <div className="alert alert-warning small mt-2">{error}</div>}
+    </section>
+  );
+}
 
 const StudentFlow = ({ onSubmitQuestion }) => {
   const [activeTab, setActiveTab] = useState('student'); // 'student' | 'teacher'
@@ -24,8 +106,10 @@ const StudentFlow = ({ onSubmitQuestion }) => {
   const [notification, setNotification] = useState(null);
   const [dataLessons, setDataLessons] = useState([]);
   const [activeLessonId, setActiveLessonId] = useState('lesson-01');
-  const [currentPageIndex, setCurrentPageIndex] = useState(0);
-  const [selectionSource, setSelectionSource] = useState('');
+  const [pdfDocument, setPdfDocument] = useState(null);
+  const [pdfPageCount, setPdfPageCount] = useState(0);
+  const [pdfLoading, setPdfLoading] = useState(false);
+  const [pdfError, setPdfError] = useState('');
 
   const activeDataLesson = dataLessons.find((lesson) => lesson.lessonId === activeLessonId) || dataLessons[0];
   const lessonView = activeDataLesson
@@ -34,7 +118,7 @@ const StudentFlow = ({ onSubmitQuestion }) => {
         courseName: 'VLearn · Hackathon learning data',
         title: activeDataLesson.title,
         totalPages: activeDataLesson.paragraphs?.length || 1,
-        currentPage: currentPageIndex + 1,
+        currentPage: 1,
         source: activeDataLesson.source,
         slideUrl: getBackendAssetUrl(activeDataLesson.slideUrl),
         chapters: [
@@ -53,13 +137,6 @@ const StudentFlow = ({ onSubmitQuestion }) => {
       }
     : MOCK_LESSON;
 
-  const totalSlidePages = lessonView.paragraphs?.length || 1;
-  const safePageIndex = Math.min(currentPageIndex, totalSlidePages - 1);
-  const activeSlideParagraph = lessonView.paragraphs?.[safePageIndex] || lessonView.paragraphs?.[0] || {
-    code: 'P-001',
-    text: ''
-  };
-
   useEffect(() => {
     let active = true;
 
@@ -72,10 +149,8 @@ const StudentFlow = ({ onSubmitQuestion }) => {
         setDataLessons(lessons);
         if (lessons[0]?.lessonId) {
           setActiveLessonId(lessons[0].lessonId);
-          setCurrentPageIndex(0);
-          setSelectedText(lessons[0].paragraphs?.[0]?.text || '');
-          setSelectionSource('Đang dùng đoạn mở đầu của tài liệu.');
-          setQuestionText(lessons[0].defaultQuestion || '');
+          setSelectedText('');
+          setQuestionText('');
         }
       } catch (error) {
         setNotification({
@@ -135,8 +210,9 @@ const StudentFlow = ({ onSubmitQuestion }) => {
 
   // Canvas Freehand Drawing State
   const canvasRef = useRef(null);
-  const drawingStartRef = useRef(null);
-  const drawingBoundsRef = useRef(null);
+  const pdfPagesContainerRef = useRef(null);
+  const penBoundsRef = useRef(null);
+  const penPointsRef = useRef([]);
   const [isDrawing, setIsDrawing] = useState(false);
   const [prevPos, setPrevPos] = useState({ x: 0, y: 0 });
   const [hasDrawings, setHasDrawings] = useState(false);
@@ -144,54 +220,74 @@ const StudentFlow = ({ onSubmitQuestion }) => {
   // Adjust canvas size to match container
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (canvas) {
-      canvas.width = canvas.parentElement.clientWidth;
-      canvas.height = canvas.parentElement.clientHeight;
-    }
-  }, [toolMode, safePageIndex, activeLessonId]);
+    if (!canvas?.parentElement) return undefined;
 
-  const useCurrentSlideAsContext = (source, defaultQuestion) => {
-    const context = activeSlideParagraph.text || selectedText.trim();
-    if (!context) return;
+    const resizeCanvas = () => {
+      const parent = canvas.parentElement;
+      canvas.width = parent.clientWidth;
+      canvas.height = parent.clientHeight;
+    };
+    const observer = new ResizeObserver(resizeCanvas);
+    observer.observe(canvas.parentElement);
+    resizeCanvas();
 
-    setSelectedText(context);
-    setSelectionSource(source);
-    if (!questionText.trim()) {
-      setQuestionText(defaultQuestion);
+    return () => observer.disconnect();
+  }, [toolMode]);
+
+  // Load the PDF once, then render every page in a vertically scrollable reader.
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadPdf() {
+      setPdfLoading(true);
+      setPdfError('');
+      setPdfDocument(null);
+      setPdfPageCount(0);
+
+      try {
+        const documentProxy = await pdfjsLib.getDocument(lessonView.slideUrl).promise;
+        if (cancelled) return;
+        setPdfDocument(documentProxy);
+        setPdfPageCount(documentProxy.numPages);
+      } catch (error) {
+        if (!cancelled) {
+          setPdfError(`Không thể render PDF để chọn text: ${error.message}`);
+        }
+      } finally {
+        if (!cancelled) setPdfLoading(false);
+      }
     }
-  };
+
+    if (lessonView.slideUrl) loadPdf();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [lessonView.slideUrl]);
 
   // Canvas Drawing Handlers
   const startDrawing = (e) => {
-    if (toolMode !== 'pen' && toolMode !== 'highlight') return;
+    if (toolMode !== 'pen') return;
     const canvas = canvasRef.current;
     const rect = canvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
     setIsDrawing(true);
-    drawingStartRef.current = { x, y };
-    drawingBoundsRef.current = { minX: x, minY: y, maxX: x, maxY: y };
     setPrevPos({ x, y });
+    penBoundsRef.current = { minX: x, minY: y, maxX: x, maxY: y };
+    penPointsRef.current = [{ x, y }];
   };
 
   const draw = (e) => {
-    if (!isDrawing || (toolMode !== 'pen' && toolMode !== 'highlight')) return;
-    if (toolMode === 'highlight') return;
+    if (!isDrawing || toolMode !== 'pen') return;
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
     const rect = canvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
-    const bounds = drawingBoundsRef.current;
-    if (bounds) {
-      bounds.minX = Math.min(bounds.minX, x);
-      bounds.minY = Math.min(bounds.minY, y);
-      bounds.maxX = Math.max(bounds.maxX, x);
-      bounds.maxY = Math.max(bounds.maxY, y);
-    }
 
-    ctx.strokeStyle = '#ef4444';
-    ctx.lineWidth = 4;
+    ctx.strokeStyle = '#ef4444'; // Red pen color
+    ctx.lineWidth = 3;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
 
@@ -201,154 +297,51 @@ const StudentFlow = ({ onSubmitQuestion }) => {
     ctx.stroke();
 
     setPrevPos({ x, y });
+    if (penBoundsRef.current) {
+      penBoundsRef.current = {
+        minX: Math.min(penBoundsRef.current.minX, x),
+        minY: Math.min(penBoundsRef.current.minY, y),
+        maxX: Math.max(penBoundsRef.current.maxX, x),
+        maxY: Math.max(penBoundsRef.current.maxY, y)
+      };
+    }
+    penPointsRef.current.push({ x, y });
     setHasDrawings(true);
   };
 
-  const applySelectedText = (text, options = {}) => {
-    const cleanText = String(text || '').trim();
-    if (cleanText.length < 2) return;
+  const stopDrawing = () => {
+    if (isDrawing && toolMode === 'pen' && penBoundsRef.current && pdfPagesContainerRef.current && canvasRef.current) {
+      const bounds = penBoundsRef.current;
+      const canvasRect = canvasRef.current.getBoundingClientRect();
+      const points = penPointsRef.current;
+      const isClosed = points.length > 6 && Math.hypot(points[0].x - points.at(-1).x, points[0].y - points.at(-1).y) < 36;
+      const pointInPolygon = (point, polygon) => polygon.reduce((inside, current, index) => {
+        const previous = polygon[index === 0 ? polygon.length - 1 : index - 1];
+        const crosses = (current.y > point.y) !== (previous.y > point.y)
+          && point.x < ((previous.x - current.x) * (point.y - current.y)) / (previous.y - current.y) + current.x;
+        return crosses ? !inside : inside;
+      }, false);
+      const text = isClosed ? Array.from(pdfPagesContainerRef.current.querySelectorAll('[data-pdf-text]'))
+        .filter((node) => {
+          const rect = node.getBoundingClientRect();
+          const center = { x: rect.left + rect.width / 2 - canvasRect.left, y: rect.top + rect.height / 2 - canvasRect.top };
+          return pointInPolygon(center, points);
+        })
+        .map((node) => node.textContent.trim())
+        .filter(Boolean)
+        .join(' ') : '';
 
-    setSelectedText(cleanText);
-    setSelectionSource(options.source || 'Đã lấy đoạn text từ transcript.');
-
-    if (options.highlight) {
-      setHighlightedSnippets((current) => (
-        current.includes(cleanText) ? current : [...current, cleanText]
-      ));
-      setQuestionText(`Giải thích đoạn trích highlight: "${cleanText}"`);
-      return;
-    }
-
-    if (!questionText.trim()) {
-      setQuestionText('Giải thích đoạn kiến thức này giúp em.');
-    }
-  };
-
-  const normalizeCanvasBox = (box, canvas) => {
-    if (!box || !canvas) return null;
-    const x = Math.max(0, Math.min(box.x, canvas.width));
-    const y = Math.max(0, Math.min(box.y, canvas.height));
-    const width = Math.max(0, Math.min(box.width, canvas.width - x));
-    const height = Math.max(0, Math.min(box.height, canvas.height - y));
-
-    if (width < 8 || height < 8) return null;
-
-    return {
-      x: x / canvas.width,
-      y: y / canvas.height,
-      width: width / canvas.width,
-      height: height / canvas.height
-    };
-  };
-
-  const recognizeCurrentRegion = async (box, source, defaultQuestion) => {
-    const canvas = canvasRef.current;
-    const bbox = normalizeCanvasBox(box, canvas);
-
-    if (!bbox || !activeDataLesson?.slideFile) {
-      useCurrentSlideAsContext(source, defaultQuestion);
-      return;
-    }
-
-    try {
-      const result = await recognizeSlideRegion({
-        lessonId: activeDataLesson?.lessonId || 'lesson-01',
-        slideFile: activeDataLesson.slideFile,
-        page: safePageIndex + 1,
-        bbox
-      });
-
-      const regionText = result.selectedText?.trim();
-      if (regionText) {
-        setSelectedText(regionText);
-        setSelectionSource(`${source} Nhận diện ${result.matchedBlocks?.length || 0} block trong vùng khoanh.`);
-        if (!questionText.trim()) {
-          setQuestionText(defaultQuestion);
-        }
-        return;
-      }
-    } catch (error) {
-      setNotification({
-        type: 'warning',
-        message: `Chưa nhận diện được vùng khoanh, đang dùng context của cả slide: ${error.message}`
-      });
-    }
-
-    useCurrentSlideAsContext(source, defaultQuestion);
-  };
-
-  const stopDrawing = async (e) => {
-    if (isDrawing && toolMode === 'pen') {
-      const bounds = drawingBoundsRef.current;
-      const box = bounds
-        ? {
-            x: bounds.minX,
-            y: bounds.minY,
-            width: bounds.maxX - bounds.minX,
-            height: bounds.maxY - bounds.minY
-          }
-        : null;
-
-      await recognizeCurrentRegion(
-        box,
-        `Đã khoanh bằng bút đỏ trên slide ${safePageIndex + 1}; AI dùng nội dung slide này làm ngữ cảnh.`,
-        'Giải thích phần em vừa khoanh trong slide này.'
-      );
-      setIsDrawing(false);
-      return;
-    }
-
-    if (isDrawing && toolMode === 'highlight') {
-      const canvas = canvasRef.current;
-      const start = drawingStartRef.current;
-
-      if (canvas && start && e) {
-        const rect = canvas.getBoundingClientRect();
-        const endX = e.clientX - rect.left;
-        const endY = e.clientY - rect.top;
-        const x = Math.min(start.x, endX);
-        const y = Math.min(start.y, endY);
-        const width = Math.abs(endX - start.x);
-        const height = Math.abs(endY - start.y);
-
-        if (width > 8 && height > 8) {
-          const ctx = canvas.getContext('2d');
-          ctx.fillStyle = 'rgba(250, 204, 21, 0.28)';
-          ctx.strokeStyle = 'rgba(202, 138, 4, 0.7)';
-          ctx.lineWidth = 2;
-          ctx.fillRect(x, y, width, height);
-          ctx.strokeRect(x, y, width, height);
-          setHasDrawings(true);
-        }
-      }
-
-      await recognizeCurrentRegion(
-        canvas && start && e
-          ? {
-              x: Math.min(start.x, e.clientX - canvas.getBoundingClientRect().left),
-              y: Math.min(start.y, e.clientY - canvas.getBoundingClientRect().top),
-              width: Math.abs(e.clientX - canvas.getBoundingClientRect().left - start.x),
-              height: Math.abs(e.clientY - canvas.getBoundingClientRect().top - start.y)
-            }
-          : null,
-        `Đã highlight trực tiếp trên slide ${safePageIndex + 1}; AI dùng nội dung slide này làm ngữ cảnh.`,
-        'Giải thích phần em vừa highlight trong slide này.'
-      );
-      setIsDrawing(false);
-      return;
-    }
-
-    if (isDrawing && toolMode === 'pen') {
-      const drawingContext = selectedText.trim() || activeSlideParagraph.text || '';
-      if (drawingContext) {
-        setSelectedText(drawingContext);
-        setSelectionSource('Vùng khoanh bằng bút: dùng đoạn transcript đang mở làm ngữ cảnh hỏi AI.');
-        if (!questionText.trim()) {
-          setQuestionText('Giải thích phần em vừa khoanh trong slide này.');
-        }
+      if (text.length > 2) {
+        setSelectedText(text);
+        setQuestionText(`Giải thích đoạn em vừa khoanh: "${text}"`);
+        setNotification({ type: 'info', message: 'Đã lấy text nằm trong vùng khoanh. Bạn có thể sửa câu hỏi rồi gửi AI Tutor.' });
+      } else if ((bounds.maxX - bounds.minX) > 12 && (bounds.maxY - bounds.minY) > 12) {
+        setNotification({ type: 'warning', message: isClosed ? 'Không nhận ra text trong vùng khoanh. Hãy khoanh sát chữ hơn.' : 'Hãy khoanh kín một vùng chữ; nét bút chưa tạo thành một vòng khép kín.' });
       }
     }
     setIsDrawing(false);
+    penBoundsRef.current = null;
+    penPointsRef.current = [];
   };
 
   // Exact Text Selection Handler for Highlight Mode & Read Mode
@@ -357,22 +350,21 @@ const StudentFlow = ({ onSubmitQuestion }) => {
     const text = selection.toString().trim();
 
     if (text && text.length > 2) {
-      applySelectedText(text, {
-        highlight: toolMode === 'highlight',
-        source: toolMode === 'highlight'
-          ? 'Đã highlight đoạn text trong transcript.'
-          : 'Đã bôi đen đoạn text trong transcript.'
-      });
-      return;
+      setSelectedText(text);
+
+      if (toolMode === 'highlight') {
+        if (!highlightedSnippets.includes(text)) {
+          setHighlightedSnippets(prev => [...prev, text]);
+        }
+        setQuestionText(`Giải thích đoạn trích highlight: "${text}"`);
+      }
     }
   };
 
   // Clear drawings and highlights
   const handleClearAnnotations = () => {
     setHighlightedSnippets([]);
-    drawingStartRef.current = null;
     setSelectedText('');
-    setSelectionSource('');
     setQuestionText('');
     const canvas = canvasRef.current;
     if (canvas) {
@@ -598,7 +590,7 @@ const StudentFlow = ({ onSubmitQuestion }) => {
             🖍️ Highlight
           </button>
 
-          <span className="small text-muted border-start ps-2">Trang {safePageIndex + 1} · {totalSlidePages} slide</span>
+          <span className="small text-muted border-start ps-2">Trang 5 · 1 note</span>
           <span className="small text-muted border-start ps-2 me-2">- 100% +</span>
 
           {(highlightedSnippets.length > 0 || hasDrawings) && (
@@ -681,10 +673,8 @@ const StudentFlow = ({ onSubmitQuestion }) => {
                         setActiveLessonId(doc.id);
                         const nextLesson = dataLessons.find((lesson) => lesson.lessonId === doc.id);
                         if (nextLesson) {
-                          setSelectedText(nextLesson.paragraphs?.[0]?.text || '');
-                          setCurrentPageIndex(0);
-                          setSelectionSource('Đang dùng đoạn mở đầu của tài liệu.');
-                          setQuestionText(nextLesson.defaultQuestion || '');
+                          setSelectedText('');
+                          setQuestionText('');
                           setTutorResult(null);
                           setShowQuiz(false);
                         }
@@ -706,6 +696,7 @@ const StudentFlow = ({ onSubmitQuestion }) => {
           {/* Center PDF Slide Canvas */}
           <main className="flex-grow-1 p-4 bg-light overflow-auto position-relative">
             <div className="card shadow-sm border-0 p-4 mx-auto bg-white rounded-4 position-relative" style={{ maxWidth: '850px' }}>
+              
               <div className="d-flex align-items-center justify-content-between pb-3 mb-3 border-bottom position-relative" style={{ zIndex: 2 }}>
                 <span className="badge bg-secondary font-weight-bold">Tài liệu thật từ data</span>
                 <span className="small text-muted font-monospace">Mã tài liệu: {lessonView.id}</span>
@@ -719,108 +710,57 @@ const StudentFlow = ({ onSubmitQuestion }) => {
               >
                 <h4 className="font-weight-bold text-dark mb-3">{lessonView.title}</h4>
 
-                <div
-                  className="interactive-slide-page border rounded-3 bg-white mb-3 position-relative overflow-hidden"
-                  style={{
-                    minHeight: '620px',
-                    borderColor: '#dbe4f0'
-                  }}
-                >
-                  <div className="d-flex align-items-center justify-content-between px-3 py-2 border-bottom bg-light">
-                    <div>
-                      <span className="badge bg-primary-subtle text-primary border me-2">Slide {safePageIndex + 1}</span>
-                      <span className="small text-muted">{safePageIndex + 1}/{totalSlidePages}</span>
-                    </div>
-                    <div className="btn-group btn-group-sm">
-                      <button
-                        type="button"
-                        className="btn btn-outline-secondary"
-                        disabled={safePageIndex === 0}
-                        onClick={() => {
-                          setCurrentPageIndex((page) => Math.max(0, page - 1));
-                          setSelectedText('');
-                          setSelectionSource('');
-                          handleClearAnnotations();
-                        }}
-                      >
-                        Trước
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn-outline-primary"
-                        onClick={() => applySelectedText(activeSlideParagraph.text, { source: `Đã chọn toàn bộ slide ${safePageIndex + 1}.` })}
-                      >
-                        Hỏi slide này
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn-outline-secondary"
-                        disabled={safePageIndex >= totalSlidePages - 1}
-                        onClick={() => {
-                          setCurrentPageIndex((page) => Math.min(totalSlidePages - 1, page + 1));
-                          setSelectedText('');
-                          setSelectionSource('');
-                          handleClearAnnotations();
-                        }}
-                      >
-                        Sau
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="position-relative bg-light" style={{ aspectRatio: '16 / 9' }}>
-                    {lessonView.slideUrl ? (
-                      <img
-                        key={`${activeDataLesson?.slideFile}-${safePageIndex}`}
-                        alt={`${lessonView.title} - slide ${safePageIndex + 1}`}
-                        src={getSlidePageImageUrl(activeDataLesson?.slideFile, safePageIndex + 1)}
-                        className="position-absolute top-0 start-0 w-100 h-100"
-                        style={{ objectFit: 'fill', background: '#f8fafc', pointerEvents: 'none' }}
-                      />
-                    ) : (
-                      <div className="h-100 d-flex align-items-center justify-content-center text-muted">
-                        Không có file PDF gốc cho tài liệu này.
-                      </div>
-                    )}
-
-                    <canvas
-                      ref={canvasRef}
-                      onMouseDown={startDrawing}
-                      onMouseMove={draw}
-                      onMouseUp={stopDrawing}
-                      onMouseLeave={stopDrawing}
-                      className="position-absolute top-0 start-0 w-100 h-100"
-                      style={{
-                        pointerEvents: toolMode === 'pen' || toolMode === 'highlight' ? 'auto' : 'none',
-                        zIndex: 5,
-                        cursor: toolMode === 'pen' || toolMode === 'highlight' ? 'crosshair' : 'default'
-                      }}
-                    />
-                  </div>
-                </div>
-
                 {lessonView.slideUrl && (
-                  <div className="small text-muted px-1 mb-2">
-                    File PDF gốc: <a href={lessonView.slideUrl} target="_blank" rel="noreferrer">{lessonView.id}</a>
+                  <div className="border rounded-3 overflow-hidden bg-light mb-4">
+                    <div className="d-flex align-items-center justify-content-between px-3 py-2 border-bottom bg-white small">
+                      <strong>PDF có thể chọn text</strong>
+                      <span>{pdfPageCount ? `${pdfPageCount} trang · cuộn để xem tất cả` : 'Đang tải PDF…'}</span>
+                    </div>
+                    <div
+                      className="p-2 overflow-auto bg-light"
+                      ref={pdfPagesContainerRef}
+                      style={{ height: '620px' }}
+                      title="Cuộn để xem tất cả trang PDF"
+                    >
+                      {pdfLoading && <div className="small text-muted p-3">Đang tải PDF và lớp text…</div>}
+                      {pdfError && <div className="alert alert-warning m-2 small">{pdfError}</div>}
+                      <div className="position-relative" style={{ minHeight: '100%' }}>
+                        {pdfDocument && Array.from({ length: pdfPageCount }, (_, index) => (
+                          <PdfPage
+                            key={`${lessonView.id}-${index + 1}`}
+                            documentProxy={pdfDocument}
+                            pageNumber={index + 1}
+                            onTextMouseUp={handleTextMouseUp}
+                          />
+                        ))}
+                        <canvas
+                          ref={canvasRef}
+                          onMouseDown={startDrawing}
+                          onMouseMove={draw}
+                          onMouseUp={stopDrawing}
+                          onMouseLeave={stopDrawing}
+                          className="position-absolute top-0 start-0 w-100 h-100"
+                          style={{
+                            pointerEvents: toolMode === 'pen' ? 'auto' : 'none',
+                            zIndex: toolMode === 'pen' ? 10 : 1,
+                            cursor: toolMode === 'pen' ? 'crosshair' : 'default'
+                          }}
+                        />
+                      </div>
+                    </div>
+                    <div className="small text-muted px-3 py-2 border-top bg-white">
+                      Cuộn để xem toàn bộ trang. Chọn <strong>Highlight</strong> rồi bôi đen chữ trong PDF, hoặc dùng <strong>Bút</strong> khoanh kín vùng chữ để đưa đúng đoạn đó vào AI Tutor. <a href={lessonView.slideUrl} target="_blank" rel="noreferrer">Mở PDF gốc</a>
+                    </div>
                   </div>
                 )}
               </div>
 
               {selectedText && (
-                <div className="alert alert-indigo mt-3 d-flex align-items-center justify-content-between gap-2 p-2 position-relative" style={{ background: '#e0e7ff', color: '#3730a3', zIndex: 2 }}>
-                  <small className="text-truncate" style={{ maxWidth: '76%' }}>
+                <div className="alert alert-indigo mt-3 d-flex align-items-center justify-content-between p-2 position-relative" style={{ background: '#e0e7ff', color: '#3730a3', zIndex: 2 }}>
+                  <small className="text-truncate" style={{ maxWidth: '80%' }}>
                     <strong>Đoạn trích chọn:</strong> "{selectedText}"
-                    {selectionSource && <span className="d-block text-muted">{selectionSource}</span>}
                   </small>
-                  <button
-                    className="btn btn-sm btn-primary font-weight-bold"
-                    onClick={() => {
-                      setSelectedText('');
-                      setSelectionSource('');
-                    }}
-                  >
-                    Xóa chọn
-                  </button>
+                  <button className="btn btn-sm btn-primary font-weight-bold" onClick={() => setSelectedText('')}>Xóa chọn</button>
                 </div>
               )}
             </div>
@@ -844,10 +784,7 @@ const StudentFlow = ({ onSubmitQuestion }) => {
                 rows="3"
                 placeholder="Bôi đen đoạn slide bên trái hoặc dán đoạn kiến thức vào đây."
                 value={selectedText}
-                onChange={(e) => {
-                  setSelectedText(e.target.value);
-                  setSelectionSource(e.target.value.trim() ? 'Đã nhập/dán thủ công.' : '');
-                }}
+                onChange={(e) => setSelectedText(e.target.value)}
               />
               <label className="form-label small text-muted font-weight-bold">Nhập câu hỏi của bạn:</label>
               <textarea
