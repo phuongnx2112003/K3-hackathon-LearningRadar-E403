@@ -4,6 +4,7 @@ const path = require("path");
 
 const root = path.resolve(__dirname, "..");
 const casesPath = path.join(__dirname, "test-cases.json");
+const testMdPath = path.join(__dirname, "test.md");
 const resultsJsonPath = path.join(__dirname, "results.json");
 const resultsMdPath = path.join(__dirname, "results.md");
 
@@ -111,7 +112,9 @@ function toMarkdown(results) {
   const lines = [
     "# LearningRadar Eval Results",
     "",
-    `Ket qua lan chay dau: **${passed}/${total}**`,
+    `Nguon bo test: \`eval/test.md\``,
+    "",
+    `Ket qua chay: **${passed}/${total}**`,
     "",
     "| ID | Type | Source | Pass | Fallback | Expected check | Answer summary |",
     "|---|---|---|---|---|---|---|"
@@ -138,6 +141,7 @@ function toMarkdown(results) {
   lines.push("## Ghi chu");
   lines.push("");
   lines.push("- PASS/FAIL duoc cham theo `mustContain` va `mustNotContain` trong `eval/test-cases.json`.");
+  lines.push("- `eval/test-cases.json` la ban may-doc duoc dong bo tu `eval/test.md`.");
   lines.push("- `fallback=false` nghia la backend nhan cau tra loi tu AI service/model that, khong phai fallback backend.");
   lines.push("- Cac cau FAIL van duoc giu lai de nhom phan tich va cai tien prompt/guardrail.");
 
@@ -146,6 +150,15 @@ function toMarkdown(results) {
 
 async function main() {
   const testCases = JSON.parse(fs.readFileSync(casesPath, "utf8"));
+  const testMd = fs.readFileSync(testMdPath, "utf8");
+  const markdownCaseCount = (testMd.match(/^\d+\.$/gm) || []).length;
+
+  if (markdownCaseCount !== testCases.length) {
+    throw new Error(
+      `eval/test.md has ${markdownCaseCount} cases but eval/test-cases.json has ${testCases.length} cases`
+    );
+  }
+
   const ai = startService("ai-service", path.join(root, "ai-service"), { PORT: AI_PORT });
   const backend = startService("backend", path.join(root, "backend"), {
     PORT: BACKEND_PORT,

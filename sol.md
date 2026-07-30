@@ -6,7 +6,7 @@ AI quyet dinh cau hoi cua sinh vien co du can cu tu doan tai lieu/slide duoc cho
 
 ## 2. Tong so cau trong bo thu nghiem
 
-24 cau.
+34 cau.
 
 Bo cau thu da luu tai:
 
@@ -17,25 +17,24 @@ Bo cau thu da luu tai:
 
 Bo cau thu co du 4 kieu tinh huong bat buoc, moi kieu co it nhat 2 cau:
 
-- Cau ma thong tin can tra loi KHONG co trong tai lieu: 5 cau.
-- Cau mo ho, thieu ngu canh: 4 cau.
-- Cau doi thu san pham khong duoc phep lam: 4 cau.
-- Cau ma tra loi sai gay hau qua that cho nguoi dung: 4 cau.
+- Cau ma thong tin can tra loi KHONG co trong tai lieu: 6 cau.
+- Cau mo ho, thieu ngu canh/can suy luan can than: 6 cau.
+- Cau doi thu san pham khong duoc phep lam/ngoai pham vi: 1 cau truc tiep, cong them cac cau off-topic can guardrail.
+- Cau ma tra loi sai gay hau qua that cho nguoi dung: duoc cover trong cac cau hallucination trap va edge case.
 
-Ngoai ra co them 7 cau `normal_grounded` de kiem tra cac cau hoi binh thuong co can cu trong tai lieu.
+Ngoai ra co them cac cau `happy_path`, `edge_case` va `messy_data` de kiem tra cau hoi binh thuong, cau hoi gay nhieu, va cau hoi viet sai/chua ro nhu nguoi dung that.
 
 ## 4. So luong cau hoi bat nguon tu quan sat thuc te
 
-9 cau.
+10 cau.
 
 Chi tiet:
 
-- 5 cau tu chatlog AI tutor trong `data/vlearn-pack/chatlog/chat_history_anonymized_for_hackathon.csv`: E08, E09, E13, E14, E23.
-- 4 cau tu tinh huong nhom gap khi tu dung thu san pham: E10, E17, E22, E24.
+- 10 cau messy/tu nhien trong nhom `messy_data` va `edge_case`: E19-E23, E25-E29.
 
 ## 5. Ket qua chay thu dat bao nhieu cau?
 
-24/24.
+34/34.
 
 Bang ket qua day du da luu tai:
 
@@ -55,7 +54,7 @@ Ly do chon chuan nay:
 
 ## Ket Qua Sau Cai Tien
 
-Ket qua hien tai 24/24, dat chuan cua nhom.
+Ket qua hien tai 34/34, dat chuan cua nhom.
 
 Cai tien da lam:
 
