@@ -4,6 +4,10 @@ const { generateTutorAnswer } = require("../services/llm.service");
 const { buildTutorPrompt } = require("../services/prompt.service");
 const { readJson, sendError, sendOk } = require("../utils/response");
 
+function isNonEmptyString(value) {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
 async function handleAskRoute(req, res) {
   if (req.method !== "POST") {
     sendError(res, 405, "METHOD_NOT_ALLOWED", "Only POST is allowed");
@@ -13,14 +17,14 @@ async function handleAskRoute(req, res) {
   try {
     const payload = await readJson(req);
 
-    if (!payload.selectedText || !payload.question) {
+    if (!isNonEmptyString(payload.selectedText) || !isNonEmptyString(payload.question)) {
       sendError(res, 400, "VALIDATION_ERROR", "selectedText va question la bat buoc");
       return;
     }
 
     const prompt = buildTutorPrompt(payload);
     const tutorAnswer = await generateTutorAnswer(prompt);
-    const label = labelConcept(payload);
+    const label = await labelConcept(payload);
 
     sendOk(res, {
       answer: tutorAnswer.answer,
@@ -30,7 +34,13 @@ async function handleAskRoute(req, res) {
       confidence: tutorAnswer.confidence
     });
   } catch (error) {
-    sendError(res, 500, "AI_ASK_FAILED", error.message);
+    const isInvalidJson = error instanceof SyntaxError;
+    sendError(
+      res,
+      isInvalidJson ? 400 : 500,
+      isInvalidJson ? "INVALID_JSON" : "AI_ASK_FAILED",
+      isInvalidJson ? "Request body must be valid JSON" : error.message
+    );
   }
 }
 
