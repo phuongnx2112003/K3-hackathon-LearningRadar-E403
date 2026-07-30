@@ -31,6 +31,15 @@ function extractOutputText(response) {
   throw new Error("OpenAI response did not contain output text");
 }
 
+function parseJsonOutput(outputText) {
+  const jsonText = outputText
+    .trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/, "");
+
+  return JSON.parse(jsonText);
+}
+
 async function generateStructuredResponse(prompt, schemaName) {
   if ((process.env.AI_MODE || "openai").toLowerCase() === "mock") {
     return null;
@@ -64,7 +73,7 @@ async function generateStructuredResponse(prompt, schemaName) {
   }
 
   try {
-    return JSON.parse(extractOutputText(responseBody));
+    return parseJsonOutput(extractOutputText(responseBody));
   } catch (error) {
     throw new Error(`${schemaName} response was not valid JSON: ${error.message}`);
   }
@@ -95,5 +104,6 @@ async function generateTutorAnswer(prompt) {
 
 module.exports = {
   generateStructuredResponse,
-  generateTutorAnswer
+  generateTutorAnswer,
+  parseJsonOutput
 };
