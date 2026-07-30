@@ -88,11 +88,11 @@ Loại: [ ] Tối ưu tính năng có sẵn  [x] Tính năng mới
 
 ## §8. Phân công & kế hoạch
 - **Phân công có tên (spec / evidence / prompt / code / demo):**
-  - *Spec/Evidence/Eval:* Nguyễn Xuân Phượng (2A202601874)
-  - *Prompt/Citation:* Nguyễn Đào Nam Hải (2A202601037)
-  - *Code (Backend/AI/Data):* Trần Đức Mạnh (2A202601567)
+  - *Spec/Evidence/Eval:* Nguyễn Đào Nam Hải (2A202601037) 
+  - *Prompt/Citation:* Nguyễn Xuân Phượng (2A202601874)
+  - *Code (Backend/AI):* Trần Đức Mạnh (2A202601567), Nguyễn Xuân Phượng (2A202601874)
   - *Code (Frontend Student):* Phùng Hồng Phước (2A202601215), Lê Công Dũng (2A202601649)
-  - *Code/Demo (Dashboard):* Lê Nguyễn Minh Đức (2A202601013)
+  - *Code/Demo (Dashboard cho Lab Coach):* Lê Nguyễn Minh Đức (2A202601013)
 - **Willing users (≥3 tên) + kế hoạch vòng validation CP5 (3 câu hỏi, ai log):**
   - *Dự kiến 3 Willing Users:* Nguyễn Văn A (SV), Trần Thị B (SV), Lê Văn C (SV).
   - *Kế hoạch 3 câu hỏi phỏng vấn (sáng mai thực hiện):* (1) Giải thích kèm trích dẫn (citation) có giúp bạn tin tưởng AI hơn không? (2) Độ khó của Quiz có phù hợp với kiến thức đoạn slide bạn vừa chọn không? (3) Việc tự báo cáo cho Lab Coach khi trượt Quiz có khiến bạn an tâm hơn không?
