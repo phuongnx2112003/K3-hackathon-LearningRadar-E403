@@ -21,7 +21,7 @@ const QuizFlow = ({ onClose, onQuizComplete }) => {
     setScore(correctCount);
     setSubmitted(true);
 
-    const isPassed = correctCount >= 4; // Pass threshold: 4/5
+    const isPassed = correctCount >= 3; // Policy: đạt từ 3/5 trở lên
     if (onQuizComplete) {
       onQuizComplete(correctCount, isPassed);
     }
@@ -48,7 +48,7 @@ const QuizFlow = ({ onClose, onQuizComplete }) => {
             {!submitted ? (
               <div>
                 <p className="text-muted small mb-4">
-                  Hoàn thành 5 câu hỏi trắc nghiệm bên dưới để kiểm tra mức độ hiểu bài của bạn. Cần đạt tối thiểu <strong>4/5 câu</strong> để vượt qua!
+                  Hoàn thành 5 câu hỏi trắc nghiệm bên dưới để kiểm tra mức độ hiểu bài của bạn. Cần đạt tối thiểu <strong>3/5 câu</strong> để vượt qua!
                 </p>
 
                 {MOCK_QUIZ.map((q) => (
@@ -83,7 +83,7 @@ const QuizFlow = ({ onClose, onQuizComplete }) => {
               <div>
                 {/* Result Summary Header */}
                 <div className="text-center py-3 mb-4 bg-white rounded-4 border p-3 shadow-sm">
-                  {score >= 4 ? (
+                  {score >= 3 ? (
                     <div>
                       <div className="fs-1 text-success mb-1">🎉</div>
                       <h4 className="font-weight-bold text-success">XUẤT SẮC! ĐÃ VƯỢT QUA QUIZ</h4>
@@ -98,7 +98,7 @@ const QuizFlow = ({ onClose, onQuizComplete }) => {
                       <h4 className="font-weight-bold text-warning-emphasis">CẦN CỦNG CỐ LẠI KIẾN THỨC</h4>
                       <h5 className="font-weight-bold mb-2">Kết quả: {score} / 5 câu chính xác</h5>
                       <p className="text-dark small mb-0">
-                        AI Tutor đã tự động tổng hợp <strong>giải thích chi tiết cho các câu trả lời chưa đúng</strong> bên dưới để giúp bạn nắm vững kiến thức mà không cần gửi ticket!
+                        LearningRadar đã tạo ticket cho TA, đồng thời AI Tutor tổng hợp <strong>giải thích chi tiết cho các câu trả lời chưa đúng</strong> để bạn ôn lại ngay.
                       </p>
                     </div>
                   )}
@@ -152,7 +152,7 @@ const QuizFlow = ({ onClose, onQuizComplete }) => {
           </div>
 
           <div className="modal-footer bg-white border-top d-flex justify-content-between">
-            {submitted && score < 4 ? (
+            {submitted && score < 3 ? (
               <button className="btn btn-outline-primary font-weight-bold" onClick={handleRetry}>
                 🔄 Làm lại Quiz ngay
               </button>
