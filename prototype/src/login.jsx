@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
+import learningRadarLogo from '../assets/learningradar_logo_icon.png';
 
 const Login = ({ onLogin }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [error, setError] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
 
   const ACCOUNTS = {
     hocvien: {
@@ -61,77 +63,88 @@ const Login = ({ onLogin }) => {
   };
 
   return (
-    <div className="min-vh-100 bg-light d-flex align-items-center justify-content-center p-3" style={{ background: '#f8fafc' }}>
-      <div className="card border shadow-sm rounded-4 overflow-hidden" style={{ maxWidth: '400px', width: '100%' }}>
-        
-        {/* Minimal Header */}
-        <div className="p-4 text-center border-bottom bg-white">
-          <div className="d-inline-flex align-items-center justify-content-center bg-primary text-white rounded-3 mb-2 font-weight-bold" style={{ width: '44px', height: '44px', fontSize: '1.2rem' }}>
-            LR
+    <div className="login-page-shell">
+      <div className="login-card">
+        <div className="login-card-header">
+          <div className="login-logo">
+            <img src={learningRadarLogo} alt="LearningRadar" />
           </div>
-          <h5 className="font-weight-bold text-dark mb-1">LearningRadar</h5>
-          <p className="text-muted small mb-0">Hệ thống Trợ giảng AI & Đánh giá học tập</p>
+          <h1>LearningRadar</h1>
+          <p>Hệ thống Trợ giảng AI & Đánh giá học tập</p>
         </div>
 
-        {/* Form Body */}
-        <div className="card-body p-4 bg-white">
+        <div className="login-card-body">
           {error && (
-            <div className="alert alert-danger py-2 small mb-3" role="alert">
+            <div className="alert alert-danger py-2 mb-4" role="alert">
               {error}
             </div>
           )}
 
           <form onSubmit={handleSubmit}>
-            <div className="mb-3">
-              <label className="form-label small font-weight-bold text-secondary mb-1">Tên tài khoản</label>
-              <input
-                type="text"
-                className="form-control"
-                placeholder="Nhập tên tài khoản"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-              />
+            <div className="login-field">
+              <label>Tên tài khoản</label>
+              <div className="login-input-wrap">
+                <span className="login-input-icon" aria-hidden="true">♟</span>
+                <input
+                  type="text"
+                  placeholder="Nhập tên tài khoản"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  autoComplete="username"
+                />
+              </div>
             </div>
 
-            <div className="mb-4">
-              <label className="form-label small font-weight-bold text-secondary mb-1">Mật khẩu</label>
-              <input
-                type="password"
-                className="form-control"
-                placeholder="Nhập mật khẩu"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
+            <div className="login-field">
+              <label>Mật khẩu</label>
+              <div className="login-input-wrap">
+                <span className="login-input-icon" aria-hidden="true">▣</span>
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder="Nhập mật khẩu"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  autoComplete="current-password"
+                />
+                <button
+                  type="button"
+                  className="login-eye-button"
+                  onClick={() => setShowPassword((current) => !current)}
+                  aria-label={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+                  title={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+                >
+                  ◉
+                </button>
+              </div>
             </div>
 
-            <div className="mb-4">
-              <label className="form-label small font-weight-bold text-secondary mb-1">Tên hiển thị của học viên</label>
-              <input
-                type="text"
-                className="form-control"
-                placeholder="Ví dụ: Nguyễn Văn A"
-                value={displayName}
-                onChange={(e) => setDisplayName(e.target.value)}
-                maxLength={80}
-              />
-              <div className="form-text small">Tên này chỉ được đính kèm vào ticket để Lab Coach nhận diện bạn.</div>
+            <div className="login-field">
+              <label>Tên hiển thị của học viên</label>
+              <div className="login-input-wrap">
+                <span className="login-input-icon" aria-hidden="true">♙</span>
+                <input
+                  type="text"
+                  placeholder="Ví dụ: Nguyễn Văn A"
+                  value={displayName}
+                  onChange={(e) => setDisplayName(e.target.value)}
+                  maxLength={80}
+                  autoComplete="name"
+                />
+              </div>
+              <p className="login-help-text">Tên này chỉ được đính kèm vào ticket để Lab Coach nhận diện bạn.</p>
             </div>
 
             <button
               type="submit"
-              className="btn btn-primary w-100 py-2 font-weight-bold shadow-sm"
-              style={{ background: '#4f46e5', border: 'none' }}
+              className="login-submit-button"
             >
               Đăng nhập
             </button>
           </form>
         </div>
 
-        {/* Footer */}
-        <div className="card-footer bg-light p-3 text-center border-top">
-          <small className="text-muted" style={{ fontSize: '0.75rem' }}>
-            LearningRadar Platform
-          </small>
+        <div className="login-card-footer">
+          LearningRadar Platform
         </div>
       </div>
     </div>

@@ -5,6 +5,7 @@ import { MOCK_LESSON, INITIAL_TICKETS, MOCK_AI_RESPONSE } from './mock-data';
 import TutorResult from './tutor-result';
 import QuizFlow from './quiz-flow';
 import { getAnonymousStudentId } from './anonymous-student';
+import learningRadarLogo from '../assets/learningradar_logo_icon.png';
 import {
   askTutor,
   createTicket as createTicketApi,
@@ -957,7 +958,8 @@ const StudentFlow = ({ user, onLogout, onSubmitQuestion, tickets: externalTicket
           <button className="btn btn-light btn-sm border">‹</button>
 
           <div className="d-flex align-items-center gap-2 font-weight-bold text-dark fs-5">
-            <span className="text-primary font-weight-bold">V</span>Learn
+            <img src={learningRadarLogo} alt="LearningRadar" className="student-topbar-logo" />
+            <span>LearningRadar</span>
           </div>
 
           <div className="vr mx-1"></div>
