@@ -25,12 +25,42 @@ function buildQuizPrompt(payload = {}) {
     "The quiz MUST test whether the student understood the exact selectedText and the exact question they just asked.",
     "Do not drift to another topic. If selectedText is about LLM, ask about LLM. If it is about Automation/Augmentation, ask about Automation/Augmentation.",
     "Create exactly 5 questions. Each question has exactly 4 options. Only one option is correct. correctIndex is an integer from 0 to 3.",
+    "Each question must include explanation: a short Vietnamese explanation of why the correct option is correct.",
     "Questions must be clear, practical, and based only on the provided context.",
     "Avoid generic course-policy questions unless the selectedText itself is about course policy.",
     "Return ONLY one valid JSON object matching this schema:",
-    '{"conceptId":"string", "conceptLabel":"string", "questions":[{"id":"q1", "question":"string", "options":["A","B","C","D"], "correctIndex":0}]}',
+    '{"conceptId":"string", "conceptLabel":"string", "questions":[{"id":"q1", "question":"string", "options":["A","B","C","D"], "correctIndex":0, "explanation":"string"}]}',
     "Context data:",
     buildContext(payload, ["lessonId", "conceptId", "conceptLabel", "selectedText", "question", "answer"])
+  ].join("\n");
+}
+
+function buildQuizReviewPrompt(payload = {}) {
+  return [
+    "You are the VLearn AI Tutor reviewing a submitted quiz. Answer in Vietnamese.",
+    "Generate a specific explanation for each reviewed question, based only on the selectedText, original student question, tutor answer, quiz question, the student's selected option, and the correct option.",
+    "Do not use generic wording like 'xem lai doan kien thuc'. Explain the exact misconception and why the correct option is better.",
+    "For correct answers, briefly reinforce the key idea. For wrong answers, explain why the chosen answer is wrong and why the correct answer is right.",
+    "Keep each explanation 2-3 concise sentences.",
+    "Return ONLY one valid JSON object matching this schema:",
+    '{"review":[{"questionId":"q1", "explanation":"string"}]}',
+    "Context data:",
+    JSON.stringify(payload, null, 2)
+  ].join("\n");
+}
+
+function buildSlideRegionVisionPrompt(payload = {}) {
+  return [
+    "You are VLearn slide-region OCR and image understanding.",
+    "The user circled one region of a PDF slide. Analyze ONLY that image region.",
+    "If the region is mostly text or a scanned image of text, OCR it exactly as much as possible.",
+    "If the region is a diagram/chart/table/image, summarize the diagram in Vietnamese: visible nodes, labels, arrows/relationships, and the main idea. Do not only list raw labels.",
+    "If textHint is provided, use it only as an OCR hint; still inspect the image and describe the visual structure.",
+    "Do not invent content outside the image. If unclear, say what is unclear.",
+    "Return ONLY one valid JSON object matching this schema:",
+    '{"selectedText":"string", "description":"string", "regionType":"text|diagram|mixed|unclear", "confidence":0.0}',
+    "Metadata:",
+    buildContext(payload, ["slideFile", "page", "textHint"])
   ].join("\n");
 }
 
@@ -49,6 +79,8 @@ function buildLabelPrompt(payload = {}) {
 module.exports = {
   buildContext,
   buildLabelPrompt,
+  buildQuizReviewPrompt,
   buildQuizPrompt,
+  buildSlideRegionVisionPrompt,
   buildTutorPrompt
 };

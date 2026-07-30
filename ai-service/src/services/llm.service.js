@@ -17,6 +17,18 @@ function shouldUseOpenAi() {
 function getMockStructuredResponse(schemaName) {
   const normalizedName = String(schemaName || "").toLowerCase();
 
+  if (normalizedName.includes("review")) {
+    return {
+      review: [
+        {
+          questionId: "q1",
+          explanation:
+            "Câu này kiểm tra đúng ý chính trong đoạn đã chọn. Đáp án đúng phản ánh trực tiếp khái niệm được hỏi, còn lựa chọn sai thường nhầm sang vai trò hoặc ví dụ khác."
+        }
+      ]
+    };
+  }
+
   if (normalizedName.includes("quiz")) {
     return mockQuiz;
   }
@@ -111,6 +123,57 @@ async function generateStructuredResponse(prompt, schemaName) {
   }
 }
 
+async function generateVisionStructuredResponse(prompt, imageDataUrl, schemaName) {
+  if (!shouldUseOpenAi()) {
+    return {
+      selectedText: "Vùng khoanh là ảnh/slide đã được chọn. Hãy bật AI_MODE=openai và OPENAI_API_KEY để OCR hoặc mô tả ảnh bằng model vision.",
+      description: "Fallback local: chưa gọi model vision thật.",
+      confidence: 0.35
+    };
+  }
+
+  if (typeof fetch !== "function") {
+    throw new Error("Global fetch is not available. Use Node 18 or newer.");
+  }
+
+  const { apiKey, baseUrl, model } = getOpenAiConfig();
+  const response = await fetch(`${baseUrl}/responses`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      model,
+      input: [
+        {
+          role: "user",
+          content: [
+            { type: "input_text", text: prompt },
+            { type: "input_image", image_url: imageDataUrl, detail: "high" }
+          ]
+        }
+      ],
+      store: false,
+      text: {
+        format: { type: "json_object" }
+      }
+    })
+  });
+
+  const responseBody = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const message = responseBody.error?.message || `OpenAI responded with ${response.status}`;
+    throw new Error(message);
+  }
+
+  try {
+    return parseJsonOutput(extractOutputText(responseBody));
+  } catch (error) {
+    throw new Error(`${schemaName} response was not valid JSON: ${error.message}`);
+  }
+}
+
 async function generateTutorAnswer(prompt) {
   const result = await generateStructuredResponse(prompt, "Tutor");
 
@@ -127,6 +190,7 @@ async function generateTutorAnswer(prompt) {
 module.exports = {
   generateStructuredResponse,
   generateTutorAnswer,
+  generateVisionStructuredResponse,
   getMockStructuredResponse,
   parseJsonOutput
 };

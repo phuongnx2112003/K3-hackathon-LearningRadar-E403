@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { MOCK_LESSON, INITIAL_TICKETS, MOCK_AI_RESPONSE } from './mock-data';
@@ -9,12 +9,13 @@ import {
   createTicket as createTicketApi,
   getBackendAssetUrl,
   getDashboardTickets,
-  getLessons
+  getLessons,
+  recognizeSlideRegion
 } from './api-client';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
-function PdfPage({ documentProxy, pageNumber, onTextMouseUp }) {
+function PdfPage({ documentProxy, pageNumber, onTextMouseUp, onRendered, toolMode }) {
   const canvasRef = useRef(null);
   const textLayerRef = useRef(null);
   const [error, setError] = useState('');
@@ -69,6 +70,7 @@ function PdfPage({ documentProxy, pageNumber, onTextMouseUp }) {
           span.style.fontSize = `${fontHeight}px`;
           textLayer.appendChild(span);
         });
+        onRendered?.();
       } catch (renderError) {
         if (!cancelled) setError(`Không thể hiển thị trang ${pageNumber}: ${renderError.message}`);
       }
@@ -79,11 +81,13 @@ function PdfPage({ documentProxy, pageNumber, onTextMouseUp }) {
       cancelled = true;
       renderTask?.cancel();
     };
-  }, [documentProxy, pageNumber]);
+  }, [documentProxy, pageNumber, onRendered]);
+
+  const canSelectText = toolMode === 'read' || toolMode === 'highlight';
 
   return (
     <section className="position-relative mx-auto mb-3" style={{ width: 'fit-content', minHeight: '120px' }}>
-      <canvas ref={canvasRef} className="d-block shadow-sm" />
+      <canvas ref={canvasRef} data-pdf-page-canvas="true" data-pdf-page={pageNumber} className="d-block shadow-sm" />
       <div
         ref={textLayerRef}
         onMouseUp={(event) => {
@@ -92,7 +96,13 @@ function PdfPage({ documentProxy, pageNumber, onTextMouseUp }) {
         }}
         aria-label={`Lớp văn bản có thể bôi đen của PDF, trang ${pageNumber}`}
         className="pdf-text-layer"
-        style={{ position: 'absolute', inset: 0, userSelect: 'text', cursor: 'text' }}
+        style={{
+          position: 'absolute',
+          inset: 0,
+          userSelect: canSelectText ? 'text' : 'none',
+          pointerEvents: canSelectText ? 'auto' : 'none',
+          cursor: canSelectText ? 'text' : 'default'
+        }}
       />
       {error && <div className="alert alert-warning small mt-2">{error}</div>}
     </section>
@@ -100,7 +110,7 @@ function PdfPage({ documentProxy, pageNumber, onTextMouseUp }) {
 }
 
 const StudentFlow = ({ user, onLogout, onSubmitQuestion, tickets: externalTickets, onAddTicket }) => {
-  const [toolMode, setToolMode] = useState('read'); // 'read' | 'pen' | 'highlight'
+  const [toolMode, setToolMode] = useState('read'); // 'read' | 'pen' | 'eraser' | 'highlight'
   const [selectedText, setSelectedText] = useState('');
   const [questionText, setQuestionText] = useState('');
   const [loading, setLoading] = useState(false);
@@ -114,6 +124,7 @@ const StudentFlow = ({ user, onLogout, onSubmitQuestion, tickets: externalTicket
   const [pdfPageCount, setPdfPageCount] = useState(0);
   const [pdfLoading, setPdfLoading] = useState(false);
   const [pdfError, setPdfError] = useState('');
+  const [pdfRenderTick, setPdfRenderTick] = useState(0);
   const [selectionSource, setSelectionSource] = useState('');
 
   const activeDataLesson = dataLessons.find((lesson) => lesson.lessonId === activeLessonId) || dataLessons[0];
@@ -144,6 +155,9 @@ const StudentFlow = ({ user, onLogout, onSubmitQuestion, tickets: externalTicket
 
   const totalSlidePages = pdfPageCount || lessonView.totalPages || 1;
   const safePageIndex = 0;
+  const handlePdfPageRendered = useCallback(() => {
+    setPdfRenderTick((current) => current + 1);
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -253,22 +267,43 @@ const StudentFlow = ({ user, onLogout, onSubmitQuestion, tickets: externalTicket
   const [prevPos, setPrevPos] = useState({ x: 0, y: 0 });
   const [hasDrawings, setHasDrawings] = useState(false);
 
-  // Adjust canvas size to match container
+  // Adjust canvas size to match container while preserving existing drawings.
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas?.parentElement) return undefined;
 
     const resizeCanvas = () => {
       const parent = canvas.parentElement;
-      canvas.width = parent.clientWidth;
-      canvas.height = parent.clientHeight;
+      const nextWidth = Math.max(parent.scrollWidth, parent.clientWidth);
+      const nextHeight = Math.max(parent.scrollHeight, parent.clientHeight);
+      if (canvas.width === nextWidth && canvas.height === nextHeight) return;
+
+      const snapshot = document.createElement('canvas');
+      snapshot.width = canvas.width;
+      snapshot.height = canvas.height;
+      const snapshotCtx = snapshot.getContext('2d');
+      snapshotCtx.drawImage(canvas, 0, 0);
+
+      canvas.width = nextWidth;
+      canvas.height = nextHeight;
+      canvas.style.width = `${nextWidth}px`;
+      canvas.style.height = `${nextHeight}px`;
+
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(snapshot, 0, 0);
     };
     const observer = new ResizeObserver(resizeCanvas);
     observer.observe(canvas.parentElement);
+    const frame = requestAnimationFrame(resizeCanvas);
+    const timers = [120, 360, 800].map((delay) => setTimeout(resizeCanvas, delay));
     resizeCanvas();
 
-    return () => observer.disconnect();
-  }, [toolMode]);
+    return () => {
+      cancelAnimationFrame(frame);
+      timers.forEach(clearTimeout);
+      observer.disconnect();
+    };
+  }, [pdfDocument, pdfPageCount, pdfRenderTick, lessonView.id]);
 
   // Load the PDF once, then render every page in a vertically scrollable reader.
   useEffect(() => {
@@ -303,7 +338,10 @@ const StudentFlow = ({ user, onLogout, onSubmitQuestion, tickets: externalTicket
 
   // Canvas Drawing Handlers
   const startDrawing = (e) => {
-    if (toolMode !== 'pen' && toolMode !== 'highlight') return;
+    if (toolMode !== 'pen' && toolMode !== 'eraser' && toolMode !== 'highlight') return;
+    e.preventDefault();
+    e.stopPropagation();
+    window.getSelection?.().removeAllRanges();
     const canvas = canvasRef.current;
     const rect = canvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
@@ -317,8 +355,10 @@ const StudentFlow = ({ user, onLogout, onSubmitQuestion, tickets: externalTicket
   };
 
   const draw = (e) => {
-    if (!isDrawing || (toolMode !== 'pen' && toolMode !== 'highlight')) return;
+    if (!isDrawing || (toolMode !== 'pen' && toolMode !== 'eraser' && toolMode !== 'highlight')) return;
     if (toolMode === 'highlight') return;
+    e.preventDefault();
+    e.stopPropagation();
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
     const rect = canvas.getBoundingClientRect();
@@ -332,8 +372,10 @@ const StudentFlow = ({ user, onLogout, onSubmitQuestion, tickets: externalTicket
       bounds.maxY = Math.max(bounds.maxY, y);
     }
 
-    ctx.strokeStyle = '#ef4444';
-    ctx.lineWidth = 4;
+    ctx.save();
+    ctx.globalCompositeOperation = toolMode === 'eraser' ? 'destination-out' : 'source-over';
+    ctx.strokeStyle = toolMode === 'eraser' ? 'rgba(0,0,0,1)' : '#ef4444';
+    ctx.lineWidth = toolMode === 'eraser' ? 24 : 4;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
 
@@ -341,6 +383,7 @@ const StudentFlow = ({ user, onLogout, onSubmitQuestion, tickets: externalTicket
     ctx.moveTo(prevPos.x, prevPos.y);
     ctx.lineTo(x, y);
     ctx.stroke();
+    ctx.restore();
 
     setPrevPos({ x, y });
     if (penBoundsRef.current) {
@@ -355,12 +398,120 @@ const StudentFlow = ({ user, onLogout, onSubmitQuestion, tickets: externalTicket
     setHasDrawings(true);
   };
 
-  const stopDrawing = () => {
+  const capturePenRegionImage = (bounds) => {
+    if (!pdfPagesContainerRef.current || !canvasRef.current) return null;
+
+    const overlayRect = canvasRef.current.getBoundingClientRect();
+    const pageCanvases = Array.from(pdfPagesContainerRef.current.querySelectorAll('[data-pdf-page-canvas]'));
+    const region = {
+      left: overlayRect.left + bounds.minX,
+      top: overlayRect.top + bounds.minY,
+      right: overlayRect.left + bounds.maxX,
+      bottom: overlayRect.top + bounds.maxY
+    };
+
+    const match = pageCanvases
+      .map((pageCanvas) => {
+        const rect = pageCanvas.getBoundingClientRect();
+        const left = Math.max(region.left, rect.left);
+        const top = Math.max(region.top, rect.top);
+        const right = Math.min(region.right, rect.right);
+        const bottom = Math.min(region.bottom, rect.bottom);
+        const area = Math.max(0, right - left) * Math.max(0, bottom - top);
+        return { pageCanvas, rect, area, left, top, right, bottom };
+      })
+      .filter((item) => item.area > 0)
+      .sort((a, b) => b.area - a.area)[0];
+
+    if (!match) return null;
+
+    const padding = 12;
+    const scaleX = match.pageCanvas.width / match.rect.width;
+    const scaleY = match.pageCanvas.height / match.rect.height;
+    const sx = Math.max(0, (match.left - match.rect.left - padding) * scaleX);
+    const sy = Math.max(0, (match.top - match.rect.top - padding) * scaleY);
+    const sw = Math.min(match.pageCanvas.width - sx, (match.right - match.left + padding * 2) * scaleX);
+    const sh = Math.min(match.pageCanvas.height - sy, (match.bottom - match.top + padding * 2) * scaleY);
+
+    if (sw < 8 || sh < 8) return null;
+
+    const maxSide = 1200;
+    const outputScale = Math.min(1, maxSide / Math.max(sw, sh));
+    const output = document.createElement('canvas');
+    output.width = Math.max(1, Math.round(sw * outputScale));
+    output.height = Math.max(1, Math.round(sh * outputScale));
+    output.getContext('2d').drawImage(match.pageCanvas, sx, sy, sw, sh, 0, 0, output.width, output.height);
+
+    return {
+      imageDataUrl: output.toDataURL('image/png'),
+      page: Number(match.pageCanvas.dataset.pdfPage || 1),
+      bbox: {
+        x: Math.max(0, (match.left - match.rect.left) / match.rect.width),
+        y: Math.max(0, (match.top - match.rect.top) / match.rect.height),
+        width: Math.min(1, (match.right - match.left) / match.rect.width),
+        height: Math.min(1, (match.bottom - match.top) / match.rect.height)
+      }
+    };
+  };
+
+  const recognizeImageRegion = async (bounds, textHint = '') => {
+    const capture = capturePenRegionImage(bounds);
+    if (!capture) {
+      setNotification({ type: 'warning', message: 'Không crop được vùng khoanh để OCR. Hãy khoanh lại sát nội dung trên slide.' });
+      return;
+    }
+
+    setNotification({ type: 'info', message: 'Đang OCR/mô tả vùng ảnh bạn vừa khoanh bằng AI...' });
+
+    try {
+      const result = await recognizeSlideRegion({
+        slideFile: activeDataLesson?.slideFile || lessonView.id,
+        page: capture.page,
+        bbox: capture.bbox,
+        imageDataUrl: capture.imageDataUrl,
+        textHint
+      });
+      const recognizedText = String(result.selectedText || result.description || '').trim();
+
+      if (!recognizedText) {
+        setNotification({ type: 'warning', message: 'AI chưa nhận ra nội dung trong vùng khoanh. Hãy khoanh vùng lớn hơn hoặc rõ hơn.' });
+        return;
+      }
+
+      applySelectedText(recognizedText, {
+        source: result.mode === 'vision'
+          ? `Đã OCR/mô tả ảnh từ vùng khoanh ở trang ${capture.page}.`
+          : `Đã lấy text từ vùng khoanh ở trang ${capture.page}.`
+      });
+      setQuestionText(`Giải thích vùng em vừa khoanh trên slide: "${recognizedText}"`);
+      setNotification({ type: 'success', message: 'Đã đưa nội dung vùng khoanh vào ô hỏi AI Tutor.' });
+    } catch (error) {
+      const fallbackText = String(textHint || '').replace(/\s+/g, ' ').trim();
+      if (fallbackText.length >= 2) {
+        applySelectedText(fallbackText, {
+          source: 'Backend OCR/vision chưa nhận được vùng, tạm dùng text đọc được từ PDF.'
+        });
+        setQuestionText(`Giải thích đoạn em vừa khoanh: "${fallbackText}"`);
+        setNotification({
+          type: 'warning',
+          message: 'OCR/vision chưa nhận ra vùng ảnh, hệ thống đã dùng text đọc được từ PDF để bạn hỏi tiếp.'
+        });
+        return;
+      }
+      setNotification({ type: 'danger', message: `Không OCR được vùng khoanh: ${error.message}` });
+    }
+  };
+
+  const stopDrawing = async (e) => {
+    e?.preventDefault?.();
+    e?.stopPropagation?.();
     if (isDrawing && toolMode === 'pen' && penBoundsRef.current && pdfPagesContainerRef.current && canvasRef.current) {
       const bounds = penBoundsRef.current;
       const canvasRect = canvasRef.current.getBoundingClientRect();
       const points = penPointsRef.current;
-      const isClosed = points.length > 6 && Math.hypot(points[0].x - points.at(-1).x, points[0].y - points.at(-1).y) < 36;
+      const diagonal = Math.hypot(bounds.maxX - bounds.minX, bounds.maxY - bounds.minY);
+      const closeDistance = Math.hypot(points[0].x - points.at(-1).x, points[0].y - points.at(-1).y);
+      const isClosed = points.length > 6 && closeDistance < Math.max(48, diagonal * 0.35);
       const pointInPolygon = (point, polygon) => polygon.reduce((inside, current, index) => {
         const previous = polygon[index === 0 ? polygon.length - 1 : index - 1];
         const crosses = (current.y > point.y) !== (previous.y > point.y)
@@ -377,11 +528,30 @@ const StudentFlow = ({ user, onLogout, onSubmitQuestion, tickets: externalTicket
         .filter(Boolean)
         .join(' ') : '';
 
-      if (text.length > 2) {
-        setSelectedText(text);
-        setQuestionText(`Giải thích đoạn em vừa khoanh: "${text}"`);
-        setNotification({ type: 'info', message: 'Đã lấy text nằm trong vùng khoanh. Bạn có thể sửa câu hỏi rồi gửi AI Tutor.' });
-      } else if ((bounds.maxX - bounds.minX) > 12 && (bounds.maxY - bounds.minY) > 12) {
+      const cleanPenText = text.replace(/\s+/g, ' ').trim();
+      const regionIsLargeEnough = (bounds.maxX - bounds.minX) > 12 && (bounds.maxY - bounds.minY) > 12;
+      const hasReadablePdfText = cleanPenText.length >= 12;
+
+      if (isClosed && regionIsLargeEnough) {
+        if (hasReadablePdfText) {
+          applySelectedText(cleanPenText, {
+            source: 'Đã lấy text trực tiếp từ PDF trong vùng khoanh, không gọi LLM/OCR.'
+          });
+          setQuestionText(`Giải thích đoạn em vừa khoanh: "${cleanPenText}"`);
+          setNotification({
+            type: 'success',
+            message: 'Đã lấy text trực tiếp từ PDF. Chỉ vùng không đọc được chữ mới gọi AI OCR/vision.'
+          });
+        } else {
+          await recognizeImageRegion(bounds, cleanPenText);
+        }
+        setIsDrawing(false);
+        penBoundsRef.current = null;
+        penPointsRef.current = [];
+        return;
+      }
+
+      if (regionIsLargeEnough) {
         setNotification({ type: 'warning', message: isClosed ? 'Không nhận ra text trong vùng khoanh. Hãy khoanh sát chữ hơn.' : 'Hãy khoanh kín một vùng chữ; nét bút chưa tạo thành một vòng khép kín.' });
       }
     }
@@ -664,6 +834,16 @@ const StudentFlow = ({ user, onLogout, onSubmitQuestion, tickets: externalTicket
 
           <button
             className={`btn btn-sm px-3 font-weight-bold transition-all ${
+              toolMode === 'eraser' ? 'bg-danger-subtle border border-danger text-danger rounded-3 shadow-sm' : 'text-secondary border-0'
+            }`}
+            style={toolMode === 'eraser' ? { background: '#fee2e2', color: '#b91c1c' } : {}}
+            onClick={() => setToolMode('eraser')}
+          >
+            🧽 Tẩy
+          </button>
+
+          <button
+            className={`btn btn-sm px-3 font-weight-bold transition-all ${
               toolMode === 'highlight' ? 'bg-warning-subtle border border-warning text-warning-emphasis rounded-3 shadow-sm' : 'text-secondary border-0'
             }`}
             style={toolMode === 'highlight' ? { background: '#fef08a', color: '#854d0e' } : {}}
@@ -708,6 +888,11 @@ const StudentFlow = ({ user, onLogout, onSubmitQuestion, tickets: externalTicket
       {toolMode === 'pen' && (
         <div className="bg-secondary-subtle text-dark py-1 text-center small font-weight-bold border-bottom">
           ✏️ CHẾ ĐỘ BÚT VẼ TỰ DO: Dùng chuột kéo rê để vẽ/khoanh vùng tự do lên trang slide!
+        </div>
+      )}
+      {toolMode === 'eraser' && (
+        <div className="bg-danger-subtle text-danger py-1 text-center small font-weight-bold border-bottom">
+          🧽 CHẾ ĐỘ TẨY: Kéo chuột lên nét bút đỏ để tẩy phần vừa vẽ trên slide.
         </div>
       )}
       {toolMode === 'highlight' && (
@@ -804,6 +989,8 @@ const StudentFlow = ({ user, onLogout, onSubmitQuestion, tickets: externalTicket
                             documentProxy={pdfDocument}
                             pageNumber={index + 1}
                             onTextMouseUp={handleTextMouseUp}
+                            onRendered={handlePdfPageRendered}
+                            toolMode={toolMode}
                           />
                         ))}
                         <canvas
@@ -812,11 +999,13 @@ const StudentFlow = ({ user, onLogout, onSubmitQuestion, tickets: externalTicket
                           onMouseMove={draw}
                           onMouseUp={stopDrawing}
                           onMouseLeave={stopDrawing}
-                          className="position-absolute top-0 start-0 w-100 h-100"
+                          className="position-absolute top-0 start-0"
                           style={{
-                            pointerEvents: toolMode === 'pen' ? 'auto' : 'none',
-                            zIndex: toolMode === 'pen' ? 10 : 1,
-                            cursor: toolMode === 'pen' ? 'crosshair' : 'default'
+                            pointerEvents: toolMode === 'pen' || toolMode === 'eraser' ? 'auto' : 'none',
+                            zIndex: toolMode === 'pen' || toolMode === 'eraser' ? 10 : 1,
+                            cursor: toolMode === 'pen' ? 'crosshair' : toolMode === 'eraser' ? 'cell' : 'default',
+                            touchAction: 'none',
+                            userSelect: 'none'
                           }}
                         />
                       </div>
@@ -901,7 +1090,7 @@ const StudentFlow = ({ user, onLogout, onSubmitQuestion, tickets: externalTicket
             {teacherFeedbackTickets.length > 0 && (
               <div className="mt-3 border rounded-3 p-3 bg-light">
                 <div className="d-flex align-items-center justify-content-between mb-2">
-                  <strong className="text-dark">Phan hoi tu giang vien</strong>
+                  <strong className="text-dark">Phản hồi từ giảng viên</strong>
                   <span className="badge bg-success">{teacherFeedbackTickets.length} ticket</span>
                 </div>
                 {teacherFeedbackTickets.slice(0, 3).map((ticket) => (
@@ -910,15 +1099,15 @@ const StudentFlow = ({ user, onLogout, onSubmitQuestion, tickets: externalTicket
                       <strong>{ticket.conceptLabel || ticket.id}</strong>
                       <span className="text-muted">{ticket.lastFeedbackAt || ticket.createdAt}</span>
                     </div>
-                    <div className="text-muted mt-1">Ve cau hoi: "{ticket.question}"</div>
+                    <div className="text-muted mt-1">Về câu hỏi: "{ticket.question}"</div>
                     {(ticket.teacherReplies || []).map((reply) => (
                       <div key={reply.id} className="mt-2 p-2 rounded-2" style={{ background: '#ecfdf5', color: '#065f46' }}>
-                        <strong>{reply.teacherName || 'Giang vien/TA'}:</strong> {reply.message}
+                        <strong>{reply.teacherName || 'Giảng viên/TA'}:</strong> {reply.message}
                       </div>
                     ))}
                     {ticket.teacherFeedback && (!ticket.teacherReplies || ticket.teacherReplies.length === 0) && (
                       <div className="mt-2 p-2 rounded-2" style={{ background: '#ecfdf5', color: '#065f46' }}>
-                        <strong>Giang vien/TA:</strong> {ticket.teacherFeedback}
+                        <strong>Giảng viên/TA:</strong> {ticket.teacherFeedback}
                       </div>
                     )}
                   </div>

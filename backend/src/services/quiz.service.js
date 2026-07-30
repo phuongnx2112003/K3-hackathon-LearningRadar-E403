@@ -1,5 +1,5 @@
 const mockQuizModule = require("../data/mock-quiz");
-const { generateQuiz: generateQuizWithAi } = require("./ai-client.service");
+const { generateQuiz: generateQuizWithAi, generateQuizReview } = require("./ai-client.service");
 
 const generatedQuizStore = new Map();
 
@@ -65,8 +65,25 @@ function normalizeQuestion(question, index) {
     correctIndex:
       typeof question.correctIndex === "number"
         ? question.correctIndex
-        : answerToIndex(question.correctAnswer)
+        : answerToIndex(question.correctAnswer),
+    explanation: typeof question.explanation === "string" ? question.explanation : ""
   };
+}
+
+function buildFallbackExplanation({ question, selectedText, selectedOption, correctOption, correct }) {
+  if (!question) {
+    return "Không tìm thấy câu hỏi tương ứng để tạo lời giải.";
+  }
+
+  const base = question.explanation && question.explanation.trim()
+    ? question.explanation.trim()
+    : `Đáp án đúng là "${correctOption}" vì lựa chọn này khớp trực tiếp với ý được kiểm tra trong câu hỏi "${question.question}".`;
+
+  if (correct) {
+    return `${base} Bạn đã chọn đúng, nên chỉ cần ghi nhớ lại ý chính này khi quay về đoạn tài liệu.`;
+  }
+
+  return `Bạn chọn "${selectedOption}", nhưng lựa chọn này chưa khớp với ý chính của câu hỏi. ${base} Hãy đối chiếu lại đoạn: "${String(selectedText || "").slice(0, 180)}" để thấy vì sao đáp án đúng phù hợp hơn.`;
 }
 
 function slugify(value) {
@@ -251,7 +268,7 @@ function hideCorrectAnswers(quiz) {
   return {
     conceptId: quiz.conceptId,
     conceptLabel: quiz.conceptLabel,
-    questions: quiz.questions.map(({ correctIndex, ...question }) => question)
+    questions: quiz.questions.map(({ correctIndex, explanation, ...question }) => question)
   };
 }
 
@@ -278,6 +295,9 @@ async function getQuiz(conceptId = "concept-dropout-01") {
       conceptId: quiz.conceptId || payload.conceptId || `context-${Date.now()}`,
       conceptLabel: quiz.conceptLabel || inferLabel(payload),
       questions: quiz.questions.slice(0, 5).map(normalizeQuestion),
+      selectedText: payload.selectedText || "",
+      studentQuestion: payload.question || "",
+      tutorAnswer: payload.answer || "",
       fallback: quiz.fallback === true
     };
 
@@ -288,7 +308,7 @@ async function getQuiz(conceptId = "concept-dropout-01") {
   return hideCorrectAnswers(getQuizByConcept(conceptId));
 }
 
-function submitQuiz(payload) {
+async function submitQuiz(payload) {
   const conceptId = payload.conceptId || "concept-dropout-01";
   const quiz = generatedQuizStore.get(conceptId) || getQuizByConcept(conceptId);
   const answers = Array.isArray(payload.answers) ? payload.answers : [];
@@ -301,17 +321,66 @@ function submitQuiz(payload) {
 
   const review = answers.map((answer) => {
     const question = quiz.questions.find((item) => item.id === answer.questionId);
+    const selectedOption = question?.options?.[answer.selectedIndex] || "Chưa chọn";
+    const correctOption = question?.options?.[question?.correctIndex] || "Không xác định";
+    const correct = Boolean(question && question.correctIndex === answer.selectedIndex);
+
     return {
       questionId: answer.questionId,
       selectedIndex: answer.selectedIndex,
       correctIndex: question?.correctIndex ?? null,
-      correct: Boolean(question && question.correctIndex === answer.selectedIndex)
+      explanation: buildFallbackExplanation({
+        question,
+        selectedText: payload.selectedText,
+        selectedOption,
+        correctOption,
+        correct
+      }),
+      correct
     };
   }, 0);
   const score = review.filter((item) => item.correct).length;
 
   const total = quiz.questions.length;
   const passThreshold = 3;
+
+  const reviewInput = review.map((item) => {
+    const question = quiz.questions.find((candidate) => candidate.id === item.questionId);
+    return {
+      questionId: item.questionId,
+      question: question?.question || "",
+      selectedOption: question?.options?.[item.selectedIndex] || "Chưa chọn",
+      correctOption: question?.options?.[item.correctIndex] || "Không xác định",
+      isCorrect: item.correct
+    };
+  });
+
+  try {
+    const aiReview = await generateQuizReview({
+      lessonId: payload.lessonId,
+      conceptId,
+      conceptLabel: quiz.conceptLabel,
+      selectedText: payload.selectedText || quiz.selectedText || "",
+      studentQuestion: payload.question || quiz.studentQuestion || "",
+      tutorAnswer: payload.answer || quiz.tutorAnswer || "",
+      review: reviewInput
+    });
+    const explanationByQuestionId = new Map(
+      (aiReview.review || []).map((item) => [item.questionId, item.explanation])
+    );
+
+    review.forEach((item) => {
+      const explanation = explanationByQuestionId.get(item.questionId);
+      if (explanation) {
+        item.explanation = explanation;
+        item.explanationSource = aiReview.fallback ? "fallback" : "llm";
+      }
+    });
+  } catch (error) {
+    review.forEach((item) => {
+      item.explanationSource = "fallback";
+    });
+  }
 
   return {
     score,

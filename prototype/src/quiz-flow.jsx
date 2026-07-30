@@ -53,6 +53,9 @@ const QuizFlow = ({ context, onClose, onQuizComplete }) => {
         studentId: context.studentId,
         lessonId: context.lessonId,
         conceptId: quiz.conceptId,
+        selectedText: context.selectedText,
+        question: context.question,
+        answer: context.answer,
         answers: quiz.questions.map((question) => ({
           questionId: question.id,
           selectedIndex: answers[question.id]
@@ -161,12 +164,16 @@ const QuizFlow = ({ context, onClose, onQuizComplete }) => {
                       const question = quiz.questions.find((candidate) => candidate.id === item.questionId);
                       const selected = question?.options[item.selectedIndex] || 'Chưa chọn';
                       const correct = question?.options[item.correctIndex] || 'Không xác định';
+                      const explanation = item.explanation || question?.explanation || 'Hãy xem lại đoạn kiến thức đã chọn và so sánh với đáp án đúng để hiểu ý chính của câu này.';
 
                       return (
                         <div key={item.questionId} className={`small p-2 mb-2 rounded border ${item.correct ? 'border-success bg-success-subtle' : 'border-danger bg-danger-subtle'}`}>
                           <strong>Câu {index + 1}: {item.correct ? 'Đúng' : 'Chưa đúng'}</strong>
                           <div>Bạn chọn: {selected}</div>
                           {!item.correct && <div>Đáp án đúng: {correct}</div>}
+                          <div className="mt-1">
+                            <strong>Giải thích:</strong> {explanation}
+                          </div>
                         </div>
                       );
                     })}
