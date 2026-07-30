@@ -4,6 +4,7 @@ import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { MOCK_LESSON, INITIAL_TICKETS, MOCK_AI_RESPONSE } from './mock-data';
 import TutorResult from './tutor-result';
 import QuizFlow from './quiz-flow';
+import { getAnonymousStudentId } from './anonymous-student';
 import {
   askTutor,
   createTicket as createTicketApi,
@@ -23,12 +24,54 @@ function cleanPdfText(value) {
     .trim();
 }
 
+function shortenCaseText(value, maxLength = 900) {
+  const text = String(value || '').replace(/\s+/g, ' ').trim();
+  return text.length > maxLength ? `${text.slice(0, maxLength).trim()}…` : text;
+}
+
+function buildCaseSummary({ reason, conceptLabel, question, selectedText, conversation }) {
+  const latest = conversation.at(-1) || {};
+  const learningGap = conceptLabel || latest.conceptLabel || 'Nội dung học viên đang hỏi';
+  const needsCoachHelp = reason === 'quiz_failed'
+    ? 'Học viên làm chưa đạt quiz sau phần giải thích của AI.'
+    : 'Học viên xác nhận vẫn chưa hiểu sau phần giải thích của AI.';
+  return {
+    learningGap,
+    summary: `${needsCoachHelp} Vấn đề cần hỗ trợ: ${learningGap}. Câu hỏi trọng tâm: “${shortenCaseText(question || latest.question, 220)}”`,
+    selectedContext: shortenCaseText(selectedText || latest.selectedText, 420),
+    aiExplanation: shortenCaseText(latest.answer, 1000),
+    citations: Array.isArray(latest.citations) ? latest.citations.slice(0, 2) : []
+  };
+}
+
 function PdfPage({ documentProxy, pageNumber, onTextMouseUp, onRendered, toolMode }) {
+  const sectionRef = useRef(null);
   const canvasRef = useRef(null);
   const textLayerRef = useRef(null);
   const [error, setError] = useState('');
+  // Keep every page in the reader, but defer expensive canvas work until the
+  // user is close to that page. This lets mobile users scroll the whole PDF
+  // without allocating canvases for dozens of pages at the same time.
+  const [shouldRender, setShouldRender] = useState(pageNumber <= 2);
 
   useEffect(() => {
+    if (shouldRender || !sectionRef.current) return undefined;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setShouldRender(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: '900px 0px' }
+    );
+    observer.observe(sectionRef.current);
+    return () => observer.disconnect();
+  }, [shouldRender]);
+
+  useEffect(() => {
+    if (!shouldRender) return undefined;
     let cancelled = false;
     let renderTask;
 
@@ -90,12 +133,17 @@ function PdfPage({ documentProxy, pageNumber, onTextMouseUp, onRendered, toolMod
       cancelled = true;
       renderTask?.cancel();
     };
-  }, [documentProxy, pageNumber, onRendered]);
+  }, [documentProxy, pageNumber, onRendered, shouldRender]);
 
   const canSelectText = toolMode === 'read' || toolMode === 'highlight';
 
   return (
-    <section className="position-relative mx-auto mb-3" style={{ width: 'fit-content', minHeight: '120px' }}>
+    <section ref={sectionRef} className="position-relative mx-auto mb-3" style={{ width: 'fit-content', minHeight: '120px' }}>
+      {!shouldRender && (
+        <div className="pdf-page-placeholder d-flex align-items-center justify-content-center text-muted small border bg-white">
+          Trang {pageNumber}
+        </div>
+      )}
       <canvas ref={canvasRef} data-pdf-page-canvas="true" data-pdf-page={pageNumber} className="d-block shadow-sm" />
       <div
         ref={textLayerRef}
@@ -119,11 +167,13 @@ function PdfPage({ documentProxy, pageNumber, onTextMouseUp, onRendered, toolMod
 }
 
 const StudentFlow = ({ user, onLogout, onSubmitQuestion, tickets: externalTickets, onAddTicket }) => {
+  const [studentId] = useState(getAnonymousStudentId);
   const [toolMode, setToolMode] = useState('read'); // 'read' | 'pen' | 'eraser' | 'highlight'
   const [selectedText, setSelectedText] = useState('');
   const [questionText, setQuestionText] = useState('');
   const [loading, setLoading] = useState(false);
   const [tutorResult, setTutorResult] = useState(null);
+  const [conversationHistory, setConversationHistory] = useState([]);
   const [showQuiz, setShowQuiz] = useState(false);
   const [tickets, setTickets] = useState(INITIAL_TICKETS);
   const [notification, setNotification] = useState(null);
@@ -190,6 +240,7 @@ const StudentFlow = ({ user, onLogout, onSubmitQuestion, tickets: externalTicket
           selectedPagesRef.current = [];
           setSelectedPages([]);
           setQuestionText('');
+          setConversationHistory([]);
         }
       } catch (error) {
         setNotification({
@@ -211,7 +262,7 @@ const StudentFlow = ({ user, onLogout, onSubmitQuestion, tickets: externalTicket
 
     async function syncTickets() {
       try {
-        const data = await getDashboardTickets();
+        const data = await getDashboardTickets(null, studentId);
         if (active && Array.isArray(data.tickets)) {
           setTickets(data.tickets);
         }
@@ -227,17 +278,29 @@ const StudentFlow = ({ user, onLogout, onSubmitQuestion, tickets: externalTicket
       active = false;
       clearInterval(timer);
     };
-  }, []);
+  }, [studentId]);
 
   const createTicket = async ({ reason, quizScore = null }) => {
+    const question = questionText || tutorResult?.question || 'Chưa hiểu rõ về nội dung vừa học';
+    const selectedContext = selectedText || tutorResult?.selectedText || lessonView.paragraphs[0]?.text || MOCK_LESSON.paragraphs[1].text;
+    const conversation = conversationHistory.slice(-3);
     const payload = {
-      studentId: 'student-demo-01',
+      studentId,
+      studentName: user?.name || 'Học viên ẩn danh',
       lessonId: tutorResult?.lessonId || activeDataLesson?.lessonId || 'lesson-01',
-      selectedText: selectedText || tutorResult?.selectedText || lessonView.paragraphs[0]?.text || MOCK_LESSON.paragraphs[1].text,
-      question: questionText || tutorResult?.question || 'Chưa hiểu rõ về Dropout lúc Train vs Predict',
+      selectedText: selectedContext,
+      question,
       conceptLabel: tutorResult?.conceptLabel || 'Phân biệt Dropout lúc Train vs Inference',
       reason,
-      quizScore
+      quizScore,
+      conversation,
+      caseSummary: buildCaseSummary({
+        reason,
+        conceptLabel: tutorResult?.conceptLabel,
+        question,
+        selectedText: selectedContext,
+        conversation
+      })
     };
 
     try {
@@ -341,6 +404,7 @@ const StudentFlow = ({ user, onLogout, onSubmitQuestion, tickets: externalTicket
   // Load the PDF once, then render every page in a vertically scrollable reader.
   useEffect(() => {
     let cancelled = false;
+    let loadingTimeout;
 
     async function loadPdf() {
       setPdfLoading(true);
@@ -349,15 +413,23 @@ const StudentFlow = ({ user, onLogout, onSubmitQuestion, tickets: externalTicket
       setPdfPageCount(0);
 
       try {
+        loadingTimeout = window.setTimeout(() => {
+          if (!cancelled) {
+            setPdfLoading(false);
+            setPdfError('Trình đọc PDF trên thiết bị đang tải quá lâu. Bạn có thể mở PDF gốc bên dưới.');
+          }
+        }, 15000);
         const documentProxy = await pdfjsLib.getDocument(lessonView.slideUrl).promise;
         if (cancelled) return;
         setPdfDocument(documentProxy);
         setPdfPageCount(documentProxy.numPages);
+        setPdfError('');
       } catch (error) {
         if (!cancelled) {
           setPdfError(`Không thể render PDF để chọn text: ${error.message}`);
         }
       } finally {
+        window.clearTimeout(loadingTimeout);
         if (!cancelled) setPdfLoading(false);
       }
     }
@@ -366,6 +438,7 @@ const StudentFlow = ({ user, onLogout, onSubmitQuestion, tickets: externalTicket
 
     return () => {
       cancelled = true;
+      window.clearTimeout(loadingTimeout);
     };
   }, [lessonView.slideUrl]);
 
@@ -668,17 +741,28 @@ const StudentFlow = ({ user, onLogout, onSubmitQuestion, tickets: externalTicket
     try {
       const response = await askTutor({
         lessonId: activeDataLesson?.lessonId || 'lesson-01',
-        studentId: 'student-demo-01',
+        studentId,
         selectedText,
         selectedPages,
         question: questionText
       });
-      setTutorResult({
+      const result = {
         ...response,
         lessonId: activeDataLesson?.lessonId || 'lesson-01',
         selectedText,
         question: questionText
-      });
+      };
+      setTutorResult(result);
+      setConversationHistory((history) => [
+        ...history,
+        {
+          question: result.question,
+          selectedText: result.selectedText,
+          answer: result.answer,
+          conceptLabel: result.conceptLabel,
+          citations: result.citations || (result.citation ? [result.citation] : [])
+        }
+      ].slice(-3));
     } catch (error) {
       setNotification({
         type: 'danger',
@@ -716,20 +800,25 @@ const StudentFlow = ({ user, onLogout, onSubmitQuestion, tickets: externalTicket
 
     Promise.resolve(onSubmitQuestion(payload))
       .then((result) => {
+        const tutorResponse = result
+          ? { ...result, userQuestion: payload.question, selectedText: payload.selectedText }
+          : { ...MOCK_AI_RESPONSE, userQuestion: payload.question, selectedText: payload.selectedText };
+        setConversationHistory((history) => [
+          ...history,
+          {
+            question: payload.question,
+            selectedText: payload.selectedText,
+            answer: tutorResponse.answer,
+            conceptLabel: tutorResponse.conceptLabel,
+            citations: tutorResponse.citations || (tutorResponse.citation ? [tutorResponse.citation] : [])
+          }
+        ].slice(-3));
         if (result) {
-          setTutorResult({
-            ...result,
-            userQuestion: payload.question,
-            selectedText: payload.selectedText
-          });
+          setTutorResult(tutorResponse);
           return;
         }
 
-        setTutorResult({
-          ...MOCK_AI_RESPONSE,
-          userQuestion: payload.question,
-          selectedText: payload.selectedText
-        });
+        setTutorResult(tutorResponse);
       })
       .catch((error) => {
         setNotification({
@@ -781,7 +870,7 @@ const StudentFlow = ({ user, onLogout, onSubmitQuestion, tickets: externalTicket
 
   const teacherFeedbackTickets = tickets.filter((ticket) => {
     const hasFeedback = (ticket.teacherReplies || []).length > 0 || ticket.teacherFeedback;
-    const belongsToCurrentStudent = !ticket.studentId || ticket.studentId === 'student-demo-01';
+    const belongsToCurrentStudent = ticket.studentId === studentId;
     return hasFeedback && belongsToCurrentStudent;
   });
 
@@ -946,7 +1035,7 @@ const StudentFlow = ({ user, onLogout, onSubmitQuestion, tickets: externalTicket
       )}
 
       {/* Main Workspace Body */}
-      <div className="d-flex flex-grow-1 overflow-hidden" style={{ minHeight: 'calc(100vh - 60px)' }}>
+      <div className="d-flex flex-column flex-lg-row flex-grow-1 overflow-hidden" style={{ minHeight: 'calc(100vh - 60px)' }}>
           {/* Left Sidebar */}
           <aside className="bg-white border-end p-3 d-none d-lg-block" style={{ width: '280px' }}>
             <h6 className="font-weight-bold text-dark mb-1">📖 Học liệu môn học</h6>
@@ -973,6 +1062,7 @@ const StudentFlow = ({ user, onLogout, onSubmitQuestion, tickets: externalTicket
                           selectedPagesRef.current = [];
                           setSelectedPages([]);
                           setQuestionText('');
+                          setConversationHistory([]);
                           setTutorResult(null);
                           setShowQuiz(false);
                         }
@@ -992,8 +1082,8 @@ const StudentFlow = ({ user, onLogout, onSubmitQuestion, tickets: externalTicket
           </aside>
 
           {/* Center PDF Slide Canvas */}
-          <main className="flex-grow-1 p-4 bg-light overflow-auto position-relative">
-            <div className="card shadow-sm border-0 p-4 mx-auto bg-white rounded-4 position-relative" style={{ maxWidth: '850px' }}>
+          <main className="flex-grow-1 w-100 p-2 p-lg-4 bg-light overflow-auto position-relative">
+            <div className="card shadow-sm border-0 p-3 p-lg-4 mx-auto bg-white rounded-4 position-relative" style={{ maxWidth: '850px' }}>
               
               <div className="d-flex align-items-center justify-content-between pb-3 mb-3 border-bottom position-relative" style={{ zIndex: 2 }}>
                 <span className="badge bg-secondary font-weight-bold">Tài liệu thật từ data</span>
@@ -1021,7 +1111,14 @@ const StudentFlow = ({ user, onLogout, onSubmitQuestion, tickets: externalTicket
                       title="Cuộn để xem tất cả trang PDF"
                     >
                       {pdfLoading && <div className="small text-muted p-3">Đang tải PDF và lớp text…</div>}
-                      {pdfError && <div className="alert alert-warning m-2 small">{pdfError}</div>}
+                      {pdfError && (
+                        <div className="alert alert-warning m-2 small">
+                          <div>{pdfError}</div>
+                          <a className="btn btn-sm btn-outline-primary mt-2" href={lessonView.slideUrl} target="_blank" rel="noreferrer">
+                            Mở PDF gốc trên thiết bị
+                          </a>
+                        </div>
+                      )}
                       <div className="position-relative" style={{ minHeight: '100%' }}>
                         {pdfDocument && Array.from({ length: pdfPageCount }, (_, index) => (
                           <PdfPage
@@ -1083,7 +1180,7 @@ const StudentFlow = ({ user, onLogout, onSubmitQuestion, tickets: externalTicket
           </main>
 
           {/* Right Panel: AI Tutor Drawer */}
-          <aside className="bg-white border-start p-3 overflow-auto" style={{ width: '400px' }}>
+          <aside className="tutor-panel bg-white border-start p-3 overflow-auto" style={{ width: '400px' }}>
             <div className="d-flex align-items-center gap-2 mb-3 pb-2 border-bottom">
               <span className="fs-4">🤖</span>
               <div>
@@ -1171,7 +1268,7 @@ const StudentFlow = ({ user, onLogout, onSubmitQuestion, tickets: externalTicket
         <QuizFlow
           context={{
             lessonId: activeDataLesson?.lessonId || 'lesson-01',
-            studentId: 'student-demo-01',
+            studentId,
             conceptId: tutorResult?.conceptId || 'concept-contextual',
             conceptLabel: tutorResult?.conceptLabel || 'Kiem tra diem vua thac mac',
             selectedText: tutorResult?.selectedText || selectedText,

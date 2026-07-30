@@ -120,7 +120,10 @@ export function sendTicketFeedback(id, teacherFeedback, status = "reviewed") {
   });
 }
 
-export function getDashboardTickets(status) {
-  const query = status && status !== "All" ? `?status=${encodeURIComponent(status)}` : "";
+export function getDashboardTickets(status, studentId) {
+  const params = new URLSearchParams();
+  if (status && status !== "All") params.set('status', status);
+  if (studentId) params.set('studentId', studentId);
+  const query = params.size ? `?${params.toString()}` : "";
   return request(`/api/dashboard/tickets${query}`);
 }

@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 const Login = ({ onLogin }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [displayName, setDisplayName] = useState('');
   const [error, setError] = useState('');
 
   const ACCOUNTS = {
@@ -43,15 +44,20 @@ const Login = ({ onLogin }) => {
       return;
     }
 
-    if (ACCOUNTS[cleanUser]) {
-      onLogin(ACCOUNTS[cleanUser]);
-    } else {
-      if (cleanUser.includes('coach') || cleanUser.includes('teacher') || cleanUser.includes('giangvien') || cleanUser.includes('gv')) {
-        onLogin({ ...ACCOUNTS.giangvien, username: cleanUser });
-      } else {
-        onLogin({ ...ACCOUNTS.hocvien, username: cleanUser });
-      }
+    const isCoach = cleanUser.includes('coach') || cleanUser.includes('teacher') || cleanUser.includes('giangvien') || cleanUser.includes('gv');
+    const account = ACCOUNTS[cleanUser] || (isCoach ? ACCOUNTS.giangvien : ACCOUNTS.hocvien);
+    const name = displayName.trim();
+
+    if (account.role === 'student' && !name) {
+      setError('Vui lòng nhập tên hiển thị để giảng viên nhận diện ticket của bạn.');
+      return;
     }
+
+    onLogin({
+      ...account,
+      username: cleanUser,
+      name: account.role === 'student' ? name : (name || account.name)
+    });
   };
 
   return (
@@ -96,6 +102,19 @@ const Login = ({ onLogin }) => {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
               />
+            </div>
+
+            <div className="mb-4">
+              <label className="form-label small font-weight-bold text-secondary mb-1">Tên hiển thị của học viên</label>
+              <input
+                type="text"
+                className="form-control"
+                placeholder="Ví dụ: Nguyễn Văn A"
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                maxLength={80}
+              />
+              <div className="form-text small">Tên này chỉ được đính kèm vào ticket để Lab Coach nhận diện bạn.</div>
             </div>
 
             <button

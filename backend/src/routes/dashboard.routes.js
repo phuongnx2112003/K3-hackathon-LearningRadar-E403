@@ -13,10 +13,13 @@ function handleDashboardRoutes(req, res) {
   // Hỗ trợ filter: GET /api/dashboard/tickets?status=open
   const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
   const filterStatus = url.searchParams.get("status") || null;
+  // A student sends only its browser-local anonymous ID. This is not an
+  // authentication system; it merely keeps demo sessions on different devices separate.
+  const studentId = url.searchParams.get("studentId") || null;
 
   sendOk(res, {
     summary: getDashboardSummary(),
-    tickets: listTickets(filterStatus)
+    tickets: listTickets(filterStatus, studentId)
   });
 }
 

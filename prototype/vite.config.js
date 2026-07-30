@@ -10,7 +10,12 @@ export default defineConfig(({ mode }) => {
       })
     ],
     server: {
+      // Expose the development app to devices on the same local network.
+      // The API remains proxied locally to the backend, so students only need
+      // the frontend LAN address.
+      host: '0.0.0.0',
       port: 5173,
+      strictPort: true,
       open: true,
       proxy: {
         '/api': {

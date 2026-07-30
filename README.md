@@ -26,6 +26,20 @@
 3. Viết spec theo **`03-template-ai-spec.md`** — deliverable trung tâm của cả sự kiện.
 4. Đọc **`04-rubric.md`** ngay từ đầu — biết trước bài được chấm theo tiêu chí nào.
 
+## Chạy trong mạng nội bộ (LAN)
+
+Khởi động AI service, backend và frontend trong ba terminal riêng:
+
+```bash
+(cd ai-service && npm run dev)
+(cd backend && npm run dev)
+(cd prototype && npm run dev)
+```
+
+Frontend đã được cấu hình lắng nghe toàn bộ mạng nội bộ và proxy API về backend trên cùng máy. Các thiết bị cùng Wi-Fi/LAN truy cập `http://<LAN-IP-của-máy-chạy-app>:5173`. Nếu dùng một cổng khác khi chạy Vite, thay `5173` bằng cổng đó. Ví dụ tại máy hiện tại: `http://192.168.1.43:5173`.
+
+Nếu thiết bị khác không vào được, cho phép Node.js/Vite qua firewall của máy chạy app trên mạng Private; không cần mở cổng 3000 hoặc 4000 cho các thiết bị đó.
+
 | File / thư mục | Nội dung |
 |---|---|
 | `01-de-bai.md` | Đề bài 3 hướng · 5 tiêu chí nghiệm thu · ràng buộc chung |

@@ -44,3 +44,29 @@
   color: transparent;
   background: rgba(79, 70, 229, 0.42);
 }
+
+.pdf-page-placeholder {
+  width: min(100%, 780px);
+  min-width: 320px;
+  min-height: 420px;
+}
+
+@media (max-width: 991.98px) {
+  .vlearn-app-container .tutor-panel {
+    width: 100% !important;
+    max-height: none;
+    border-left: 0 !important;
+    border-top: 1px solid var(--bs-border-color) !important;
+  }
+
+  .vlearn-app-container .pdf-slide-canvas {
+    padding: 0.5rem !important;
+  }
+
+  .pdf-page-placeholder {
+    min-width: 0;
+    width: 100%;
+    min-height: 480px;
+  }
+
+}

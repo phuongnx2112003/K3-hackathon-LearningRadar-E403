@@ -352,6 +352,8 @@ const TeacherDashboard = ({ tickets: initialTickets = [], onUpdateTicketStatus }
                     </span>
                   </td>
                   <td className="small" style={{ minWidth: '200px' }}>
+                    {t.caseSummary?.learningGap && <div><strong>Chưa hiểu:</strong> {t.caseSummary.learningGap}</div>}
+                    {t.caseSummary?.summary && <div className="text-muted mt-1">{t.caseSummary.summary}</div>}
                     <div><strong>Lý do:</strong> {t.reason === 'quiz_failed' ? 'Fail Quiz kiểm tra' : 'Bấm "Chưa hiểu"'}</div>
                     {t.quizScore !== null && t.quizScore !== undefined && <div><strong>Điểm Quiz:</strong> {t.quizScore}/5 câu</div>}
                     <details className="mt-1">
@@ -410,12 +412,45 @@ const TeacherDashboard = ({ tickets: initialTickets = [], onUpdateTicketStatus }
           <div className="row g-3">
             <div className="col-lg-6">
               <div className="bg-white border rounded-3 p-3 h-100">
+                {selectedTicket.caseSummary?.learningGap && (
+                  <div className="alert alert-warning py-2 small">
+                    <strong>Điểm học viên chưa hiểu:</strong> {selectedTicket.caseSummary.learningGap}
+                    {selectedTicket.caseSummary.summary && <div className="mt-1">{selectedTicket.caseSummary.summary}</div>}
+                  </div>
+                )}
                 <div className="small text-muted fw-bold mb-1">Câu hỏi của sinh viên</div>
                 <p className="mb-2">{selectedTicket.question}</p>
                 <div className="small text-muted fw-bold mb-1">Đoạn sinh viên chọn</div>
                 <div className="small text-dark" style={{ whiteSpace: 'pre-wrap' }}>
                   {selectedTicket.selectedText}
                 </div>
+                {selectedTicket.caseSummary?.aiExplanation && (
+                  <>
+                    <div className="small text-muted fw-bold mb-1 mt-3">AI đã giải thích</div>
+                    <div className="small text-dark" style={{ whiteSpace: 'pre-wrap' }}>{selectedTicket.caseSummary.aiExplanation}</div>
+                  </>
+                )}
+                {(selectedTicket.caseSummary?.citations || []).length > 0 && (
+                  <div className="small mt-3">
+                    <div className="text-muted fw-bold mb-1">Nguồn AI đã dùng</div>
+                    {selectedTicket.caseSummary.citations.map((citation, index) => (
+                      <div className="text-muted" key={`${selectedTicket.id}-citation-${index}`}>
+                        Trang {citation.page || '?'}: “{citation.quote || citation.source || 'Tài liệu liên quan'}”
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {(selectedTicket.conversation || []).length > 1 && (
+                  <details className="mt-3 small">
+                    <summary className="text-primary cursor-pointer">Xem các lượt hỏi AI trước đó</summary>
+                    {selectedTicket.conversation.map((turn, index) => (
+                      <div className="border-start ps-2 mt-2" key={`${selectedTicket.id}-turn-${index}`}>
+                        <strong>Lượt {index + 1} · Học viên:</strong> {turn.question}
+                        <div className="text-muted mt-1"><strong>AI:</strong> {turn.answer || 'Chưa có câu trả lời'}</div>
+                      </div>
+                    ))}
+                  </details>
+                )}
               </div>
             </div>
 
