@@ -1,21 +1,12 @@
 import React from 'react';
 
-function formatCitation(citation) {
-  if (!citation) return 'Chưa có trích dẫn.';
-  if (typeof citation === 'string') return citation;
-
-  return `${citation.source || 'Nguồn học liệu'} · ${citation.section || 'Đoạn liên quan'}${
-    citation.quote ? `\n“${citation.quote}”` : ''
-  }`;
-}
-
 const TutorResult = ({ result, onUnderstand, onNotUnderstand, loading }) => {
   if (loading) {
     return (
       <div className="card border-0 shadow-sm p-4 text-center mt-3 bg-white">
         <div className="spinner-border text-primary mx-auto mb-3" role="status"></div>
         <h6 className="font-weight-bold text-dark mb-1">AI Tutor đang tra cứu tài liệu & sinh trích dẫn...</h6>
-        <small className="text-muted">Đang phân tích slide day01_302.pdf [Trang 5]</small>
+        <small className="text-muted">Đang đối chiếu các đoạn bạn chọn với học liệu liên quan…</small>
       </div>
     );
   }
@@ -37,9 +28,14 @@ const TutorResult = ({ result, onUnderstand, onNotUnderstand, loading }) => {
       </div>
 
       {/* Citation Box */}
-      <div className="p-2 mb-3 bg-warning-subtle text-warning-emphasis border border-warning rounded small" style={{ whiteSpace: 'pre-line' }}>
-        📌 <strong>Trích dẫn</strong><br />
-        {formatCitation(result.citation)}
+      <div className="p-2 mb-3 bg-warning-subtle text-warning-emphasis border border-warning rounded small">
+        📌 <strong>Đoạn liên quan</strong>{result.citations?.length ? ` · ${result.citations.length} đoạn` : ''}
+        {(result.citations?.length ? result.citations : [result.citation]).filter(Boolean).map((citation, index) => (
+          <div className={index ? 'mt-2 pt-2 border-top border-warning' : 'mt-2'} key={`${citation.source || 'citation'}-${index}`}>
+            <strong>Trang {citation.page || '?'}</strong>
+            <div style={{ whiteSpace: 'pre-line' }}>“{citation.quote || citation}”</div>
+          </div>
+        ))}
       </div>
 
       {/* Decision Buttons (Step 6 of CP2) */}

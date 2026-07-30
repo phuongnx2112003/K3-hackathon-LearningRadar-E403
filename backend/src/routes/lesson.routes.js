@@ -3,6 +3,7 @@ const path = require("path");
 const { getLessons, getSlidePageImagePath, getSlidePath } = require("../data/mock-lessons");
 const { analyzeSlideRegion } = require("../services/ai-client.service");
 const { recognizeSlideRegion } = require("../services/slide-region.service");
+const { toLessons } = require("../services/document.service");
 const { readJson, sendError, sendOk } = require("../utils/response");
 
 function sendPdf(res, slidePath) {
@@ -95,10 +96,10 @@ async function handleLessonRoutes(req, res, url) {
 
   if (url.pathname === "/api/lessons") {
     sendOk(res, {
-      lessons: getLessons().map((lesson) => ({
+      lessons: [...getLessons().map((lesson) => ({
         ...lesson,
         slideUrl: `/api/slides/${lesson.slideFile}`
-      }))
+      })), ...toLessons()]
     });
     return;
   }

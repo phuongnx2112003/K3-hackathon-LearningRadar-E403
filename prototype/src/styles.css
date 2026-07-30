@@ -44,3 +44,421 @@
   color: transparent;
   background: rgba(79, 70, 229, 0.42);
 }
+
+.pdf-page-placeholder {
+  width: min(100%, 780px);
+  min-width: 320px;
+  min-height: 420px;
+}
+
+.lab-coach-dashboard {
+  color: #111827;
+  background: #ffffff;
+  border: 1px solid #dbe3ef;
+  border-radius: 8px;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
+  padding: 24px;
+}
+
+.lab-coach-header {
+  align-items: flex-start;
+  border-bottom: 1px solid #e5e7eb;
+  display: flex;
+  gap: 20px;
+  justify-content: space-between;
+  margin-bottom: 18px;
+  padding-bottom: 18px;
+}
+
+.lab-coach-title {
+  font-size: 1.55rem;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.lab-coach-subtitle {
+  color: #667085;
+  font-size: 0.9rem;
+  margin-top: 8px;
+}
+
+.lab-health-badge,
+.lab-kpi-pill,
+.lab-status-badge,
+.lab-reason-badge,
+.lab-concept-chip,
+.lab-concept-badge {
+  align-items: center;
+  border-radius: 6px;
+  display: inline-flex;
+  font-size: 0.78rem;
+  font-weight: 800;
+  gap: 6px;
+  line-height: 1;
+  min-height: 28px;
+  padding: 7px 11px;
+  white-space: nowrap;
+}
+
+.lab-health-badge.is-online {
+  background: #ecfdf3;
+  border: 1px solid #b7e4ca;
+  color: #166534;
+}
+
+.lab-health-badge.is-local {
+  background: #f8fafc;
+  border: 1px solid #d7dee8;
+  color: #475467;
+}
+
+.lab-health-dot,
+.tab-dot {
+  border-radius: 999px;
+  display: inline-block;
+  height: 9px;
+  width: 9px;
+}
+
+.lab-health-dot {
+  background: #22c55e;
+}
+
+.lab-coach-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.lab-kpi-pill.danger {
+  background: linear-gradient(135deg, #f43f5e, #e11d48);
+  color: #ffffff;
+}
+
+.lab-kpi-pill.warning {
+  background: linear-gradient(135deg, #f59e0b, #f97316);
+  color: #ffffff;
+}
+
+.lab-ticket-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.lab-ticket-tab {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #dbe3ef;
+  border-radius: 6px;
+  color: #475467;
+  display: inline-flex;
+  font-weight: 700;
+  gap: 10px;
+  min-height: 42px;
+  padding: 8px 18px;
+}
+
+.lab-ticket-tab.is-active {
+  background: #0d6efd;
+  border-color: #0d6efd;
+  color: #ffffff;
+  box-shadow: 0 8px 18px rgba(13, 110, 253, 0.22);
+}
+
+.tab-dot.primary {
+  background: #0d6efd;
+}
+
+.tab-dot.danger {
+  background: #ef4444;
+}
+
+.tab-dot.warning {
+  background: #f59e0b;
+}
+
+.tab-dot.success {
+  background: #22c55e;
+}
+
+.lab-ticket-tab.is-active .tab-dot {
+  background: #ffffff;
+}
+
+.lab-ticket-tab strong {
+  align-items: center;
+  background: #f1f5f9;
+  border-radius: 999px;
+  color: #475467;
+  display: inline-flex;
+  font-size: 0.75rem;
+  height: 22px;
+  justify-content: center;
+  min-width: 24px;
+  padding: 0 7px;
+}
+
+.lab-ticket-tab.is-active strong {
+  background: rgba(255, 255, 255, 0.24);
+  color: #ffffff;
+}
+
+.lab-summary-grid {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(280px, 0.7fr) minmax(320px, 1.3fr);
+  margin-bottom: 18px;
+}
+
+.lab-summary-card,
+.lab-table-card,
+.lab-reply-panel,
+.lab-materials-panel {
+  background: #ffffff;
+  border: 1px solid #dbe3ef;
+  border-radius: 8px;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.04);
+}
+
+.lab-summary-card {
+  align-items: center;
+  display: flex;
+  gap: 18px;
+  min-height: 116px;
+  padding: 20px;
+}
+
+.lab-summary-icon {
+  align-items: center;
+  background: #e8f0ff;
+  border-radius: 8px;
+  color: #0d6efd;
+  display: flex;
+  flex: 0 0 72px;
+  font-size: 2rem;
+  font-weight: 900;
+  height: 72px;
+  justify-content: center;
+}
+
+.lab-card-label {
+  color: #667085;
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
+.lab-total-number {
+  color: #111827;
+  font-size: 2.35rem;
+  font-weight: 850;
+  line-height: 1;
+}
+
+.concepts-card {
+  align-items: flex-start;
+  display: block;
+}
+
+.lab-concept-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+
+.lab-concept-chip,
+.lab-concept-badge {
+  background: #eef2ff;
+  border: 1px solid #c7d2fe;
+  color: #4338ca;
+}
+
+.lab-ticket-table {
+  font-size: 0.9rem;
+}
+
+.lab-ticket-table thead th {
+  background: #f8fafc;
+  border-bottom: 1px solid #dbe3ef;
+  color: #344054;
+  font-size: 0.82rem;
+  font-weight: 800;
+  padding: 14px 16px;
+}
+
+.lab-ticket-table tbody tr {
+  cursor: pointer;
+}
+
+.lab-ticket-table tbody td {
+  border-color: #edf2f7;
+  padding: 15px 16px;
+  vertical-align: middle;
+}
+
+.lab-ticket-table tbody tr:hover,
+.lab-ticket-table tbody tr.is-selected {
+  background: #f8fbff;
+}
+
+.ticket-code {
+  color: #0d6efd;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+}
+
+.lab-reason-badge.warning {
+  background: #fff7ed;
+  border: 1px solid #f59e0b;
+  color: #9a3412;
+}
+
+.lab-reason-badge.danger {
+  background: #fff1f2;
+  border: 1px solid #fb7185;
+  color: #e11d48;
+}
+
+.lab-status-badge.danger {
+  background: #fff1f2;
+  border: 1px solid #fb7185;
+  color: #e11d48;
+}
+
+.lab-status-badge.warning {
+  background: #fffbeb;
+  border: 1px solid #f59e0b;
+  color: #b45309;
+}
+
+.lab-status-badge.success {
+  background: #ecfdf3;
+  border: 1px solid #34d399;
+  color: #047857;
+}
+
+.lab-status-badge.secondary {
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  color: #475569;
+}
+
+.lab-status-select {
+  min-width: 160px;
+}
+
+.lab-reply-panel {
+  margin-top: 18px;
+  padding: 18px;
+}
+
+.lab-reply-header {
+  align-items: flex-start;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.lab-reply-header h4 {
+  font-size: 1.28rem;
+  font-weight: 800;
+}
+
+.lab-detail-card {
+  background: #ffffff;
+  border: 1px solid #dbe3ef;
+  border-radius: 8px;
+  height: 100%;
+  padding: 18px;
+}
+
+.lab-case-note {
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  border-radius: 6px;
+  color: #7c2d12;
+  font-size: 0.86rem;
+  margin-bottom: 14px;
+  padding: 11px 12px;
+}
+
+.lab-field-label {
+  color: #475467;
+  display: block;
+  font-size: 0.82rem;
+  font-weight: 800;
+  margin-bottom: 8px;
+}
+
+.lab-selected-context {
+  background: #fbfcfe;
+  border: 1px solid #e4eaf2;
+  border-radius: 6px;
+  color: #344054;
+  font-size: 0.9rem;
+  min-height: 74px;
+  padding: 12px;
+  white-space: pre-wrap;
+}
+
+.lab-feedback-box {
+  min-height: 132px;
+  resize: vertical;
+}
+
+.lab-reply-history {
+  background: #f8fafc;
+  border: 1px solid #e4eaf2;
+  border-radius: 6px;
+  font-size: 0.86rem;
+  margin-bottom: 10px;
+  padding: 11px 12px;
+}
+
+.lab-materials-panel {
+  margin-top: 18px;
+  padding: 14px 18px;
+}
+
+.lab-materials-panel summary {
+  color: #344054;
+  cursor: pointer;
+  font-weight: 800;
+}
+
+@media (max-width: 991.98px) {
+  .vlearn-app-container .tutor-panel {
+    width: 100% !important;
+    max-height: none;
+    border-left: 0 !important;
+    border-top: 1px solid var(--bs-border-color) !important;
+  }
+
+  .vlearn-app-container .pdf-slide-canvas {
+    padding: 0.5rem !important;
+  }
+
+  .pdf-page-placeholder {
+    min-width: 0;
+    width: 100%;
+    min-height: 480px;
+  }
+
+  .lab-coach-header,
+  .lab-reply-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .lab-coach-actions {
+    justify-content: flex-start;
+  }
+
+  .lab-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+}

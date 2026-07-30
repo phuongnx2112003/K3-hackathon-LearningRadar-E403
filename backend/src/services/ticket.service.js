@@ -6,6 +6,28 @@ const { mockTickets } = require("../data/mock-tickets");
 const allowedReasons = new Set(["not_understood", "quiz_failed"]);
 const allowedStatuses = new Set(["open", "reviewed", "closed"]);
 
+function normalizeConversation(entries) {
+  if (!Array.isArray(entries)) return [];
+  return entries.slice(-3).map((entry) => ({
+    question: String(entry?.question || "").trim().slice(0, 1000),
+    selectedText: String(entry?.selectedText || "").trim().slice(0, 1500),
+    answer: String(entry?.answer || "").trim().slice(0, 2000),
+    conceptLabel: String(entry?.conceptLabel || "").trim().slice(0, 160),
+    citations: Array.isArray(entry?.citations) ? entry.citations.slice(0, 2) : []
+  }));
+}
+
+function normalizeCaseSummary(summary) {
+  if (!summary || typeof summary !== "object") return null;
+  return {
+    learningGap: String(summary.learningGap || "").trim().slice(0, 240),
+    summary: String(summary.summary || "").trim().slice(0, 1200),
+    selectedContext: String(summary.selectedContext || "").trim().slice(0, 800),
+    aiExplanation: String(summary.aiExplanation || "").trim().slice(0, 2000),
+    citations: Array.isArray(summary.citations) ? summary.citations.slice(0, 2) : []
+  };
+}
+
 function buildTeacherReply(payload) {
   const message = String(payload.teacherFeedback || payload.feedbackMessage || payload.message || "").trim();
   if (!message) return null;
@@ -49,12 +71,15 @@ function createTicket(payload) {
   const ticket = {
     id: `ticket-${String(mockTickets.length + 1).padStart(3, "0")}`,
     studentId: payload.studentId || "student-demo-01",
+    studentName: String(payload.studentName || "Học viên ẩn danh").trim().slice(0, 80) || "Học viên ẩn danh",
     lessonId: payload.lessonId || "lesson-01",
     selectedText: payload.selectedText,
     question: payload.question,
     conceptLabel: payload.conceptLabel,
     reason: payload.reason,
     quizScore: payload.quizScore ?? null,
+    conversation: normalizeConversation(payload.conversation),
+    caseSummary: normalizeCaseSummary(payload.caseSummary),
     status: "open",
     teacherReplies: [],
     teacherFeedback: "",
@@ -70,11 +95,12 @@ function createTicket(payload) {
 /**
  * Lấy danh sách tickets, có thể filter theo status
  */
-function listTickets(filterStatus) {
-  if (filterStatus && allowedStatuses.has(filterStatus)) {
-    return mockTickets.filter((t) => t.status === filterStatus);
-  }
-  return mockTickets;
+function listTickets(filterStatus, studentId) {
+  return mockTickets.filter((ticket) => {
+    const matchesStatus = !filterStatus || !allowedStatuses.has(filterStatus) || ticket.status === filterStatus;
+    const matchesStudent = !studentId || ticket.studentId === studentId;
+    return matchesStatus && matchesStudent;
+  });
 }
 
 /**

@@ -31,3 +31,5 @@ http://localhost:3000
 - `POST /api/quiz/submit`
 - `POST /api/tickets`
 - `GET /api/dashboard/tickets`
+- `GET /api/documents`
+- `POST /api/documents` — multipart PDF, chi role `lapcoach`; file duoc index vao SQLite local truoc khi tra ve thanh cong
