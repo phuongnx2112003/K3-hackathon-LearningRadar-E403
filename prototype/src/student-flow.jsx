@@ -3,7 +3,7 @@ import { MOCK_LESSON, INITIAL_TICKETS } from './mock-data';
 import TutorResult from './tutor-result';
 import QuizFlow from './quiz-flow';
 import TeacherDashboard from './teacher-dashboard';
-import { askTutor } from './api-client';
+import { askTutor, createTicket as createTicketApi, getBackendAssetUrl, getLessons } from './api-client';
 
 const StudentFlow = ({ onSubmitQuestion }) => {
   const [activeTab, setActiveTab] = useState('student'); // 'student' | 'teacher'
@@ -15,23 +15,101 @@ const StudentFlow = ({ onSubmitQuestion }) => {
   const [showQuiz, setShowQuiz] = useState(false);
   const [tickets, setTickets] = useState(INITIAL_TICKETS);
   const [notification, setNotification] = useState(null);
+  const [dataLessons, setDataLessons] = useState([]);
+  const [activeLessonId, setActiveLessonId] = useState('lesson-01');
 
-  const createTicket = ({ reason, quizScore = null }) => {
-    const newTicket = {
-      id: `TICKET-${103 + tickets.length}`,
-      studentName: 'Sinh viên ẩn danh (U102)',
-      selectedText: selectedText || MOCK_LESSON.paragraphs[1].text,
-      question: questionText || 'Chưa hiểu rõ về Dropout lúc Train vs Predict',
+  const activeDataLesson = dataLessons.find((lesson) => lesson.lessonId === activeLessonId) || dataLessons[0];
+  const lessonView = activeDataLesson
+    ? {
+        id: activeDataLesson.slideFile || activeDataLesson.source,
+        courseName: 'VLearn · Hackathon learning data',
+        title: activeDataLesson.title,
+        totalPages: activeDataLesson.paragraphs?.length || 1,
+        currentPage: 1,
+        source: activeDataLesson.source,
+        slideUrl: getBackendAssetUrl(activeDataLesson.slideUrl),
+        chapters: [
+          {
+            title: 'Data thật từ vlearn-pack',
+            active: true,
+            docs: dataLessons.map((lesson) => ({
+              id: lesson.lessonId,
+              title: lesson.title,
+              pages: lesson.paragraphs?.length || 1,
+              active: lesson.lessonId === activeLessonId
+            }))
+          }
+        ],
+        paragraphs: activeDataLesson.paragraphs?.length ? activeDataLesson.paragraphs : MOCK_LESSON.paragraphs
+      }
+    : MOCK_LESSON;
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadLessons() {
+      try {
+        const data = await getLessons();
+        if (!active) return;
+
+        const lessons = Array.isArray(data.lessons) ? data.lessons : [];
+        setDataLessons(lessons);
+        if (lessons[0]?.lessonId) {
+          setActiveLessonId(lessons[0].lessonId);
+          setSelectedText(lessons[0].paragraphs?.[0]?.text || '');
+          setQuestionText(lessons[0].defaultQuestion || '');
+        }
+      } catch (error) {
+        setNotification({
+          type: 'warning',
+          message: `Không tải được slide/transcript từ backend, đang dùng mock local: ${error.message}`
+        });
+      }
+    }
+
+    loadLessons();
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const createTicket = async ({ reason, quizScore = null }) => {
+    const payload = {
+      studentId: 'student-demo-01',
+      lessonId: tutorResult?.lessonId || activeDataLesson?.lessonId || 'lesson-01',
+      selectedText: selectedText || tutorResult?.selectedText || lessonView.paragraphs[0]?.text || MOCK_LESSON.paragraphs[1].text,
+      question: questionText || tutorResult?.question || 'Chưa hiểu rõ về Dropout lúc Train vs Predict',
       conceptLabel: tutorResult?.conceptLabel || 'Phân biệt Dropout lúc Train vs Inference',
       reason,
-      quizScore,
-      source: reason === 'not_understood' ? 'Bấm "Chưa hiểu"' : `Fail Quiz (${quizScore}/5 câu)`,
-      status: 'Mới',
-      createdAt: 'Bây giờ'
+      quizScore
     };
 
-    setTickets((currentTickets) => [newTicket, ...currentTickets]);
-    return newTicket;
+    try {
+      const response = await createTicketApi(payload);
+      const backendTicket = response.ticket;
+      setTickets((currentTickets) => [
+        backendTicket,
+        ...currentTickets.filter((ticket) => ticket.id !== backendTicket.id)
+      ]);
+      return backendTicket;
+    } catch (error) {
+      const fallbackTicket = {
+        id: `local-ticket-${Date.now()}`,
+        studentName: 'Sinh viên ẩn danh (U102)',
+        ...payload,
+        source: reason === 'not_understood' ? 'Bấm "Chưa hiểu"' : `Fail Quiz (${quizScore}/5 câu)`,
+        status: 'open',
+        createdAt: new Date().toISOString()
+      };
+
+      setTickets((currentTickets) => [fallbackTicket, ...currentTickets]);
+      setNotification({
+        type: 'warning',
+        message: `Backend ticket API đang lỗi nên tạm lưu local ticket: ${error.message}`
+      });
+      return fallbackTicket;
+    }
   };
 
   // Exact Highlighted Text List
@@ -133,7 +211,7 @@ const StudentFlow = ({ onSubmitQuestion }) => {
 
     try {
       const response = await askTutor({
-        lessonId: 'lesson-01',
+        lessonId: activeDataLesson?.lessonId || 'lesson-01',
         studentId: 'student-demo-01',
         selectedText,
         question: questionText
@@ -154,7 +232,7 @@ const StudentFlow = ({ onSubmitQuestion }) => {
     const payload = {
       selectedText: selectedText.trim(),
       question: questionText.trim(),
-      lessonId: 'lesson-01'
+      lessonId: activeDataLesson?.lessonId || 'lesson-01'
     };
 
     if (!payload.selectedText) {
@@ -213,27 +291,27 @@ const StudentFlow = ({ onSubmitQuestion }) => {
   };
 
   // Step 6 & 8: User clicks "Chưa hiểu" -> Create Ticket
-  const handleNotUnderstand = () => {
-    const newTicket = createTicket({ reason: 'not_understood' });
+  const handleNotUnderstand = async () => {
+    const newTicket = await createTicket({ reason: 'not_understood' });
     setNotification({
       type: 'warning',
-      message: `🔴 Đã tự động tạo Ticket #${newTicket.id} gửi sang Dashboard Giảng viên!`
+      message: `Đã tạo Ticket #${newTicket.id} gửi sang Dashboard Giảng viên.`
     });
     setTutorResult(null);
   };
 
   // Step 7 & 8: Complete Quiz (Pass/Fail)
-  const handleQuizComplete = (score, passed) => {
+  const handleQuizComplete = async (score, passed) => {
     if (passed) {
       setNotification({
         type: 'success',
-        message: `🎉 Chúc mừng bạn đã đạt ${score}/5 câu Quiz! Tín hiệu hiểu bài đã được lưu vào hệ thống VLearn.`
+        message: `Chúc mừng, bạn đã đạt ${score}/5 câu Quiz. Tín hiệu hiểu bài đã được ghi nhận.`
       });
     } else {
-      const newTicket = createTicket({ reason: 'quiz_failed', quizScore: score });
+      const newTicket = await createTicket({ reason: 'quiz_failed', quizScore: score });
       setNotification({
         type: 'danger',
-        message: `⚠️ Bạn đạt ${score}/5 câu. Đã tạo Ticket #${newTicket.id} để TA hỗ trợ; bạn vẫn có thể xem giải thích và làm lại quiz.`
+        message: `Bạn đạt ${score}/5 câu. Đã tạo Ticket #${newTicket.id} để TA hỗ trợ.`
       });
     }
   };
@@ -404,7 +482,7 @@ const StudentFlow = ({ onSubmitQuestion }) => {
             <p className="text-muted small mb-3">Chương, slide và tài liệu đã upload</p>
 
             <div className="d-flex flex-column gap-2">
-              {MOCK_LESSON.chapters.map((chap, idx) => (
+              {lessonView.chapters.map((chap, idx) => (
                 <div key={idx} className="border rounded-3 p-2 bg-light">
                   <div className="d-flex align-items-center justify-content-between cursor-pointer">
                     <strong className="small text-dark">▸ {chap.title}</strong>
@@ -414,9 +492,20 @@ const StudentFlow = ({ onSubmitQuestion }) => {
                   {chap.docs && chap.docs.map((doc) => (
                     <div
                       key={doc.id}
+                      onClick={() => {
+                        setActiveLessonId(doc.id);
+                        const nextLesson = dataLessons.find((lesson) => lesson.lessonId === doc.id);
+                        if (nextLesson) {
+                          setSelectedText(nextLesson.paragraphs?.[0]?.text || '');
+                          setQuestionText(nextLesson.defaultQuestion || '');
+                          setTutorResult(null);
+                          setShowQuiz(false);
+                        }
+                      }}
                       className={`p-2 rounded mt-1 ms-2 small d-flex align-items-center justify-content-between ${
                         doc.active ? 'bg-white border-start border-primary border-3 shadow-sm font-weight-bold' : 'text-muted'
                       }`}
+                      style={{ cursor: 'pointer' }}
                     >
                       <span className="text-truncate">📄 {doc.title}</span>
                       <small className="text-muted" style={{ fontSize: '0.65rem' }}>{doc.pages} trang</small>
@@ -447,8 +536,8 @@ const StudentFlow = ({ onSubmitQuestion }) => {
               />
 
               <div className="d-flex align-items-center justify-content-between pb-3 mb-3 border-bottom position-relative" style={{ zIndex: 2 }}>
-                <span className="badge bg-secondary font-weight-bold">Trang 5 / 83</span>
-                <span className="small text-muted font-monospace">Mã tài liệu: {MOCK_LESSON.id}</span>
+                <span className="badge bg-secondary font-weight-bold">Tài liệu thật từ data</span>
+                <span className="small text-muted font-monospace">Mã tài liệu: {lessonView.id}</span>
               </div>
 
               {/* Text Area */}
@@ -457,9 +546,23 @@ const StudentFlow = ({ onSubmitQuestion }) => {
                 onMouseUp={handleTextMouseUp}
                 style={{ zIndex: 2 }}
               >
-                <h4 className="font-weight-bold text-dark mb-3">Slide 5: Overfitting & Regularization trong Deep Learning</h4>
+                <h4 className="font-weight-bold text-dark mb-3">{lessonView.title}</h4>
 
-                {MOCK_LESSON.paragraphs.map((p) => (
+                {lessonView.slideUrl && (
+                  <div className="border rounded-3 overflow-hidden bg-light mb-4">
+                    <iframe
+                      title={lessonView.title}
+                      src={lessonView.slideUrl}
+                      className="w-100 border-0"
+                      style={{ height: '430px', background: '#f8fafc' }}
+                    />
+                    <div className="small text-muted px-3 py-2 border-top bg-white">
+                      PDF slide thật: <a href={lessonView.slideUrl} target="_blank" rel="noreferrer">{lessonView.id}</a>
+                    </div>
+                  </div>
+                )}
+
+                {lessonView.paragraphs.map((p) => (
                   <p key={p.id} className="lead text-dark mb-4 p-2 rounded hover-bg-light" style={{ lineHeight: '1.8' }}>
                     <span className="badge bg-light text-secondary border me-2 font-monospace" style={{ fontSize: '0.7rem' }}>[{p.code}]</span>
                     {renderParagraphText(p.text)}
@@ -537,7 +640,7 @@ const StudentFlow = ({ onSubmitQuestion }) => {
       {showQuiz && (
         <QuizFlow
           context={{
-            lessonId: 'lesson-01',
+            lessonId: activeDataLesson?.lessonId || 'lesson-01',
             studentId: 'student-demo-01',
             conceptId: tutorResult?.conceptId || 'concept-dropout-01'
           }}
