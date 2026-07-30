@@ -1,8 +1,8 @@
 import React from 'react';
 import StudentFlow from './student-flow';
 
-function App() {
-  return <StudentFlow />;
+function App({ onSubmitQuestion }) {
+  return <StudentFlow onSubmitQuestion={onSubmitQuestion} />;
 }
 
 export default App;

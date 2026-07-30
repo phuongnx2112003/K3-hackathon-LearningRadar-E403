@@ -4,7 +4,7 @@ import TutorResult from './tutor-result';
 import QuizFlow from './quiz-flow';
 import TeacherDashboard from './teacher-dashboard';
 
-const StudentFlow = () => {
+const StudentFlow = ({ onSubmitQuestion }) => {
   const [activeTab, setActiveTab] = useState('student'); // 'student' | 'teacher'
   const [toolMode, setToolMode] = useState('read'); // 'read' | 'pen' | 'highlight'
   const [selectedText, setSelectedText] = useState('');
@@ -138,6 +138,64 @@ const StudentFlow = () => {
         selectedText: selectedText || MOCK_LESSON.paragraphs[1].text
       });
     }, 700);
+  };
+
+  // Step 4: Validate input and forward the request to the shared handler.
+  const handleSubmitQuestion = () => {
+    const payload = {
+      selectedText: selectedText.trim(),
+      question: questionText.trim(),
+      lessonId: 'lesson-01'
+    };
+
+    if (!payload.selectedText) {
+      setNotification({
+        type: 'warning',
+        message: 'Hãy chọn hoặc dán đoạn tài liệu cần hỏi trước khi gửi AI Tutor.'
+      });
+      return;
+    }
+
+    if (!payload.question) {
+      setNotification({
+        type: 'warning',
+        message: 'Hãy nhập câu hỏi trước khi gửi AI Tutor.'
+      });
+      return;
+    }
+
+    if (!onSubmitQuestion) {
+      handleSend();
+      return;
+    }
+
+    setLoading(true);
+    setTutorResult(null);
+
+    Promise.resolve(onSubmitQuestion(payload))
+      .then((result) => {
+        if (result) {
+          setTutorResult({
+            ...result,
+            userQuestion: payload.question,
+            selectedText: payload.selectedText
+          });
+          return;
+        }
+
+        setTutorResult({
+          ...MOCK_AI_RESPONSE,
+          userQuestion: payload.question,
+          selectedText: payload.selectedText
+        });
+      })
+      .catch((error) => {
+        setNotification({
+          type: 'danger',
+          message: error.message || 'Không thể gửi câu hỏi. Vui lòng thử lại.'
+        });
+      })
+      .finally(() => setLoading(false));
   };
 
   // Step 6: User clicks "Đã hiểu" -> Launch Quiz
@@ -445,7 +503,7 @@ const StudentFlow = () => {
               className="btn btn-primary w-100 font-weight-bold py-2 shadow-sm"
               style={{ background: '#4f46e5', border: 'none' }}
               disabled={loading}
-              onClick={handleSend}
+              onClick={handleSubmitQuestion}
             >
               {loading ? 'AI đang tạo trích dẫn...' : '🚀 Gửi câu hỏi cho AI Tutor'}
             </button>
