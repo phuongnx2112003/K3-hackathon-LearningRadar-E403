@@ -1,4 +1,20 @@
-// Mock Data cho Prototype CP2 — LearningRadar AI Tutor
+// MOCK DATA CHO CHECKPOINT 2 - LearningRadar (Đã chuẩn hóa theo Contract)
+
+// 1. Dữ liệu Lesson (Đoạn text sinh viên chọn)
+export const mockLessons = [
+  {
+    lessonId: "lesson-01",
+    title: "Xác định bài toán kinh doanh cho AI",
+    source: "transcript-01-clean.md",
+    content: "Trong khoảng hai năm trở lại đây, sau làn sóng AI, các công ty có áp lực phải đưa AI vào tổ chức của mình..."
+  },
+  {
+    lessonId: "lesson-02",
+    title: "Tư duy hệ thống 1 & 2",
+    source: "transcript-01-clean.md",
+    content: "Theo nghiên cứu về não bộ thì não bộ của chúng ta hay đi theo thói quen..."
+  }
+];
 
 export const MOCK_LESSON = {
   id: 'day01_302.pdf',
@@ -42,6 +58,16 @@ export const MOCK_LESSON = {
   ]
 };
 
+// 2. Dữ liệu Tutor Answer
+export const mockTutorAnswers = {
+  "lesson-01": {
+    answer: "Theo bài giảng, việc tuyển dụng AI Engineer không mang lại hiệu quả...",
+    citation: "[T01-002]",
+    conceptLabel: "Problem Formulation",
+    confidence: 0.95
+  }
+};
+
 export const MOCK_AI_RESPONSE = {
   answer: `Chào bạn! Về câu hỏi của bạn dựa trên slide **day01_302.pdf**:
 
@@ -54,7 +80,7 @@ Hy vọng giải thích này giúp bạn làm rõ khác biệt giữa lúc Train
   conceptId: 'concept-dropout-01'
 };
 
-// Quiz 5 câu kèm giải thích chi tiết khi trả lời sai
+// 3. Quiz Data
 export const MOCK_QUIZ = [
   {
     id: 1,
@@ -115,6 +141,24 @@ export const MOCK_QUIZ = [
     ],
     correctAnswer: 'B',
     explanation: 'Lúc Train ngẫu nhiên tắt neuron để rèn luyện mạng, còn lúc Inference bật toàn bộ neuron để thu được kết quả dự đoán đầy đủ và chính xác nhất.'
+  }
+];
+
+export const mockQuizzes = {
+  "lesson-01": MOCK_QUIZ
+};
+
+// 4. Ticket Data
+export const mockTickets = [
+  {
+    id: "ticket-001",
+    selectedText: "Vấn đề ở đây là cái người đặt ra đề bài đấy thì lại không có...",
+    question: "Tại sao công ty tuyển AI engineer về lại không hiệu quả và mất niềm tin ạ?",
+    conceptLabel: "Problem Formulation",
+    reason: "not_understood",
+    quizScore: null,
+    status: "open",
+    createdAt: "2026-07-30T10:45:00Z"
   }
 ];
 
